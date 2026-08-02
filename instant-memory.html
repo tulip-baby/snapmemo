@@ -1370,14 +1370,18 @@ async function apiFetch(path, options = {}) {
   const json = await res.json();
   if (!res.ok) {
     if (res.status === 401) {
-      clearToken();
-      currentUser = null;
-      data = getDefaultData();
-      $('#authOverlay').classList.remove('hidden');
-      $$('.page').forEach(p => p.classList.remove('active'));
-      $('#page-home').classList.add('active');
-      currentPage = 'home';
-      throw new Error('登录已过期，请重新登录');
+      // 登录/注册接口的 401 是"密码错误"或"用户不存在"，不应该当成 token 过期
+      const isAuthEndpoint = path === '/login' || path === '/register';
+      if (!isAuthEndpoint) {
+        clearToken();
+        currentUser = null;
+        data = getDefaultData();
+        $('#authOverlay').classList.remove('hidden');
+        $$('.page').forEach(p => p.classList.remove('active'));
+        $('#page-home').classList.add('active');
+        currentPage = 'home';
+      }
+      throw new Error(json.error || '登录已过期，请重新登录');
     }
     throw new Error(json.error || '请求失败');
   }
