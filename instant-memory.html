@@ -1075,6 +1075,35 @@
     margin-top: 20px;
     padding: 0;
   }
+
+  /* ── Crop Modal ── */
+  .crop-overlay {
+    position: fixed; inset: 0; z-index: 10000;
+    background: rgba(0,0,0,0.85);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+  }
+  .crop-overlay.hidden { display: none; }
+  .crop-container {
+    position: relative; width: 260px; height: 260px;
+    border-radius: 50%; overflow: hidden;
+    box-shadow: 0 0 0 4px rgba(255,255,255,0.3), 0 0 0 9999px rgba(0,0,0,0.5);
+    cursor: grab;
+  }
+  .crop-container:active { cursor: grabbing; }
+  .crop-container img {
+    position: absolute; user-select: none; -webkit-user-drag: none;
+    pointer-events: none;
+  }
+  .crop-actions {
+    display: flex; gap: 16px; margin-top: 24px;
+  }
+  .crop-btn {
+    padding: 10px 28px; border-radius: 20px; border: none;
+    font-size: 14px; cursor: pointer; font-weight: 500;
+  }
+  .crop-btn.confirm { background: var(--accent); color: #fff; }
+  .crop-btn.cancel { background: rgba(255,255,255,0.15); color: #fff; }
 </style>
 </head>
 <body>
@@ -1301,6 +1330,17 @@
   <!-- Hidden file inputs -->
   <input type="file" accept="image/*" id="avatarInput" style="display:none;">
   <input type="file" accept=".json" id="importInput" style="display:none;">
+
+  <!-- Crop Modal -->
+  <div class="crop-overlay hidden" id="cropOverlay">
+    <div class="crop-container" id="cropContainer">
+      <img id="cropImage" src="" alt="">
+    </div>
+    <div class="crop-actions">
+      <button class="crop-btn cancel" id="cropCancel">取消</button>
+      <button class="crop-btn confirm" id="cropConfirm">确定</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -2699,6 +2739,93 @@ function openAddInspirationModal(presetText) {
 $('#inspirationAddBtn').addEventListener('click', () => openAddInspirationModal(''));
 
 // ============================================================
+// IMAGE CROP
+// ============================================================
+let cropCallback = null;
+let cropDrag = { active: false, x: 0, y: 0, imgX: 0, imgY: 0 };
+
+function openCropModal(file, callback) {
+  cropCallback = callback;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = $('#cropImage');
+    img.src = e.target.result;
+    img.onload = function() {
+      // Scale image so shorter side fills the 260px circle
+      const size = 260;
+      const scale = Math.max(size / img.naturalWidth, size / img.naturalHeight);
+      const w = img.naturalWidth * scale;
+      const h = img.naturalHeight * scale;
+      const cx = (size - w) / 2;
+      const cy = (size - h) / 2;
+      img.style.width = w + 'px';
+      img.style.height = h + 'px';
+      img.style.left = cx + 'px';
+      img.style.top = cy + 'px';
+      cropDrag.imgX = cx; cropDrag.imgY = cy;
+    };
+    $('#cropOverlay').classList.remove('hidden');
+  };
+  reader.readAsDataURL(file);
+}
+
+function initCropDrag() {
+  const container = $('#cropContainer');
+  const img = $('#cropImage');
+
+  container.addEventListener('pointerdown', function(e) {
+    cropDrag.active = true;
+    cropDrag.x = e.clientX;
+    cropDrag.y = e.clientY;
+    container.setPointerCapture(e.pointerId);
+  });
+
+  container.addEventListener('pointermove', function(e) {
+    if (!cropDrag.active) return;
+    const dx = e.clientX - cropDrag.x;
+    const dy = e.clientY - cropDrag.y;
+    cropDrag.imgX += dx; cropDrag.imgY += dy;
+    img.style.left = cropDrag.imgX + 'px';
+    img.style.top = cropDrag.imgY + 'px';
+    cropDrag.x = e.clientX;
+    cropDrag.y = e.clientY;
+  });
+
+  container.addEventListener('pointerup', function() { cropDrag.active = false; });
+  container.addEventListener('pointerleave', function() { cropDrag.active = false; });
+}
+
+$('#cropConfirm').addEventListener('click', function() {
+  const img = $('#cropImage');
+  const canvas = document.createElement('canvas');
+  canvas.width = 260; canvas.height = 260;
+  const ctx = canvas.getContext('2d');
+
+  // Draw circular clip
+  ctx.beginPath();
+  ctx.arc(130, 130, 130, 0, Math.PI * 2);
+  ctx.clip();
+
+  // Draw image at its current position
+  const left = parseFloat(img.style.left) || 0;
+  const top = parseFloat(img.style.top) || 0;
+  const w = parseFloat(img.style.width) || 260;
+  const h = parseFloat(img.style.height) || 260;
+  ctx.drawImage(img, left, top, w, h);
+
+  const result = canvas.toDataURL('image/jpeg', 0.85);
+  $('#cropOverlay').classList.add('hidden');
+  if (cropCallback) cropCallback(result);
+});
+
+$('#cropCancel').addEventListener('click', function() {
+  $('#cropOverlay').classList.add('hidden');
+  cropCallback = null;
+});
+
+initCropDrag();
+
+// ============================================================
 // MY PAGE
 // ============================================================
 function renderMy() {
@@ -2725,17 +2852,17 @@ function renderMy() {
 }
 
 $('#avatarWrap').addEventListener('click', () => $('#avatarInput').click());
-$('#avatarInput').addEventListener('change', async function() {
+$('#avatarInput').addEventListener('change', function() {
   const file = this.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = async function(e) {
-    data.profile.avatar = e.target.result;
+  openCropModal(file, async function(cropped) {
+    data.profile.avatar = cropped;
     syncData();
-    try { await apiFetch('/me', { method: 'PUT', body: JSON.stringify({ avatar: e.target.result }) }); } catch(e) {}
+    try { await apiFetch('/me', { method: 'PUT', body: JSON.stringify({ avatar: cropped }) }); } catch(e) {}
     renderMy();
-  };
-  reader.readAsDataURL(file);
+    showToast('头像已更新');
+  });
+  this.value = '';
 });
 
 $('#nicknameEditBtn').addEventListener('click', function() {
@@ -2906,14 +3033,13 @@ function bindSetupAvatar() {
   input.addEventListener('change', function() {
     const file = this.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      setupAvatarData = e.target.result;
+    openCropModal(file, function(cropped) {
+      setupAvatarData = cropped;
       const display = document.querySelector('#setupAvatarDisplay');
-      display.innerHTML = '<img src="' + setupAvatarData + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"><input type="file" accept="image/*" id="setupAvatarInput" style="position:absolute;inset:0;opacity:0;cursor:pointer;">';
+      display.innerHTML = '<img src="' + cropped + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"><input type="file" accept="image/*" id="setupAvatarInput" style="position:absolute;inset:0;opacity:0;cursor:pointer;">';
       bindSetupAvatar();
-    };
-    reader.readAsDataURL(file);
+    });
+    this.value = '';
   });
 }
 
