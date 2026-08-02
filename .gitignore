@@ -1,0 +1,4 @@
+node_modules/
+snapmemo.db
+snapmemo.db-wal
+snapmemo.db-shm

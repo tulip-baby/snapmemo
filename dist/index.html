@@ -1,0 +1,2598 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>SnapMemo</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #ffffff;
+    --text: #1a1a1a;
+    --text-secondary: #888888;
+    --text-tertiary: #b0b0b0;
+    --accent: #333333;
+    --accent-light: #f0f0f0;
+    --border: #e8e8e8;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06);
+    --radius: 12px;
+    --radius-sm: 8px;
+    --transition: 0.2s ease;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .app {
+    width: 100%;
+    max-width: 430px;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  /* ── Header ── */
+  .page-header {
+    padding: 16px 20px 12px;
+    display: grid;
+    grid-template-columns: 40px 1fr 40px;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .page-header h1 {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+    text-align: center;
+    grid-column: 2;
+  }
+  .page-header .back-btn {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: var(--accent-light);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    color: var(--text);
+    transition: var(--transition);
+  }
+  .page-header .back-btn:hover { background: #e0e0e0; }
+  .page-header .add-btn {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+    font-size: 18px;
+    display: flex; align-items: center; justify-content: center;
+    transition: var(--transition);
+  }
+  .page-header .add-btn:hover { opacity: 0.85; }
+  .page-header .home-btn {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    border: none;
+    background: var(--accent-light);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--accent);
+    transition: var(--transition);
+    flex-shrink: 0;
+  }
+  .page-header .home-btn svg { width: 20px; height: 20px; stroke-width: 1.8; }
+  .page-header .home-btn:hover { background: #e8e0f0; color: var(--accent); }
+
+  /* ── Main Content Area ── */
+  .main-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 20px 100px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .main-content::-webkit-scrollbar { display: none; }
+
+  /* ── Pages ── */
+  .page {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.3s ease;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .page.active {
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .page.exit-left {
+    transform: translateX(-30%);
+    opacity: 0;
+  }
+  .page.exit-right {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  .page.enter-left {
+    transform: translateX(-30%);
+    opacity: 0;
+    transition: none;
+  }
+
+  /* ── Home Page ── */
+  .home-page {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    padding-bottom: 100px;
+  }
+
+  .home-brand {
+    font-size: 26px;
+    font-weight: 400;
+    color: var(--text);
+    letter-spacing: 5px;
+    margin-bottom: 56px;
+    opacity: 0.6;
+  }
+
+  .voice-btn-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+  }
+  .voice-btn {
+    width: 88px; height: 88px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border);
+    background: linear-gradient(135deg, #fafaff, #f5f3ff);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 16px rgba(99,102,241,0.08);
+  }
+  .voice-btn svg { width: 34px; height: 34px; color: var(--accent); }
+  .voice-btn:hover { border-color: var(--accent); transform: scale(1.05); box-shadow: 0 6px 20px rgba(99,102,241,0.15); }
+  .voice-btn.listening {
+    border-color: #ff3b30;
+    background: linear-gradient(135deg, #fff5f5, #ffefef);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255,59,48,0.2); }
+    50% { box-shadow: 0 0 0 16px rgba(255,59,48,0); }
+  }
+  .voice-label {
+    font-size: 14px;
+    color: var(--text-secondary);
+    letter-spacing: 2px;
+    font-weight: 400;
+  }
+
+  .voice-transcript {
+    margin-top: 24px;
+    font-size: 15px;
+    color: var(--text);
+    text-align: center;
+    max-width: 280px;
+    line-height: 1.6;
+    min-height: 24px;
+    transition: var(--transition);
+  }
+
+  .text-input-wrap {
+    margin-top: 24px;
+    display: flex;
+    gap: 8px;
+    width: 90%;
+    max-width: 380px;
+  }
+  .text-input {
+    flex: 1;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    font-size: 14px;
+    color: var(--text);
+    background: var(--bg);
+    outline: none;
+    transition: var(--transition);
+  }
+  .text-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(99,102,241,0.15);
+  }
+  .text-input::placeholder {
+    color: var(--text-tertiary);
+  }
+  .text-send-btn {
+    padding: 10px 16px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+    white-space: nowrap;
+  }
+  .text-send-btn:hover {
+    background: #4f46e5;
+  }
+  .text-send-btn:active {
+    transform: scale(0.97);
+  }
+
+  /* ── Bottom Nav ── */
+  .bottom-nav {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 84px;
+    padding: 0 12px 20px;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-around;
+    z-index: 100;
+    padding-top: 8px;
+  }
+  .nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    padding: 4px 12px;
+    color: var(--text-tertiary);
+    transition: var(--transition);
+    font-size: 11px;
+    font-family: inherit;
+  }
+  .nav-item svg { width: 24px; height: 24px; }
+  .nav-item.active { color: var(--accent); }
+  .nav-item:hover { color: var(--text-secondary); }
+  .nav-item.active:hover { color: var(--accent); }
+
+  /* ── Schedule Page ── */
+  .schedule-tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--accent-light);
+    border-radius: var(--radius-sm);
+    padding: 4px;
+    margin-bottom: 20px;
+  }
+  .schedule-tab {
+    flex: 1;
+    padding: 8px 0;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-family: inherit;
+    transition: var(--transition);
+    font-weight: 500;
+  }
+  .schedule-tab.active {
+    background: var(--bg);
+    color: var(--text);
+    box-shadow: var(--shadow);
+  }
+
+  .schedule-date-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+    font-weight: 500;
+  }
+
+  .schedule-list { display: flex; flex-direction: column; gap: 10px; }
+  .schedule-group-header {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    padding: 6px 0 2px;
+    margin-top: 6px;
+    letter-spacing: 0.5px;
+  }
+  .schedule-group-header:first-child { margin-top: 0; }
+  .schedule-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    background: #fafafa;
+    border-radius: var(--radius);
+    transition: var(--transition);
+  }
+  .schedule-item:hover { background: #f3f3f3; }
+  .schedule-content {
+    flex: 1;
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1.5;
+    min-width: 0;
+  }
+  .schedule-time-badge {
+    font-size: 12px;
+    color: var(--accent);
+    background: var(--accent-light);
+    padding: 3px 10px;
+    border-radius: 10px;
+    white-space: nowrap;
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+  .schedule-delete {
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: var(--text-tertiary);
+    font-size: 16px;
+    padding: 2px 4px;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: var(--transition);
+  }
+  .schedule-item:hover .schedule-delete { opacity: 1; }
+  .schedule-delete:hover { color: #ff3b30; }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-tertiary);
+    font-size: 14px;
+    line-height: 1.8;
+  }
+  .empty-state .empty-icon { font-size: 40px; margin-bottom: 12px; display: block; }
+
+  /* ── SOP Page ── */
+  .sop-categories {
+    display: flex;
+    gap: 4px;
+    background: var(--accent-light);
+    border-radius: var(--radius-sm);
+    padding: 4px;
+    margin-bottom: 20px;
+  }
+  .sop-cat-tab {
+    flex: 1;
+    padding: 8px 0;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-family: inherit;
+    transition: var(--transition);
+    font-weight: 500;
+  }
+  .sop-cat-tab.active {
+    background: var(--bg);
+    color: var(--text);
+    box-shadow: var(--shadow);
+  }
+
+  /* Daily SOP — collapsible folders */
+  .sop-group {
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: #fafafa;
+    transition: var(--transition);
+  }
+  .sop-group-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    cursor: pointer;
+    user-select: none;
+    transition: var(--transition);
+  }
+  .sop-group-header:hover { background: #f0f0f0; }
+  .sop-group-header .folder-icon {
+    width: 24px; height: 24px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+    color: var(--text-tertiary);
+  }
+  .sop-group.open .folder-icon { transform: rotate(90deg); }
+  .sop-group-header .folder-name {
+    flex: 1;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .sop-group-header .folder-count {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    background: #e8e8e8;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 500;
+  }
+  .sop-group-header .sop-item-delete {
+    opacity: 0.4;
+    font-size: 12px;
+  }
+  .sop-group.open .sop-group-header .sop-item-delete { opacity: 0.6; }
+  .sop-group-header .sop-item-delete:hover { opacity: 1; color: #ff3b30; }
+  .sop-group-body {
+    display: none;
+    padding: 0 16px 14px;
+  }
+  .sop-group.open .sop-group-body { display: block; }
+  .sop-group-items {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .sop-check-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: #fafafa;
+    border-radius: var(--radius-sm);
+    transition: var(--transition);
+    font-size: 14px;
+  }
+  .sop-check-item:hover { background: #f3f3f3; }
+  .sop-check-item input[type="checkbox"] {
+    width: 18px; height: 18px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  .sop-check-item .item-text { flex: 1; }
+  .sop-check-item .item-text.checked {
+    text-decoration: line-through;
+    color: var(--text-tertiary);
+  }
+  .sop-item-delete {
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: var(--text-tertiary);
+    font-size: 14px;
+    opacity: 0;
+    transition: var(--transition);
+  }
+  .sop-check-item:hover .sop-item-delete { opacity: 1; }
+  .sop-item-delete:hover { color: #ff3b30; }
+
+  .sop-add-btn {
+    width: 100%;
+    padding: 10px;
+    border: 1px dashed var(--border);
+    background: transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--text-tertiary);
+    font-size: 13px;
+    font-family: inherit;
+    transition: var(--transition);
+    margin-top: 8px;
+  }
+  .sop-add-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Event SOP — flow chart style */
+  .event-sop-card {
+    background: #fafafa;
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .event-sop-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .event-sop-title {
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .event-sop-delete {
+    border: none; background: none;
+    cursor: pointer; color: var(--text-tertiary);
+    font-size: 16px;
+    transition: var(--transition);
+  }
+  .event-sop-delete:hover { color: #ff3b30; }
+
+  .event-sop-steps {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .event-step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 0;
+  }
+  .event-step-num {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .event-step-text {
+    flex: 1;
+    font-size: 14px;
+    padding: 8px 12px;
+    background: #fff;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+  }
+  .event-step-arrow {
+    display: flex;
+    justify-content: center;
+    padding: 2px 0;
+  }
+  .event-step-arrow svg {
+    width: 20px; height: 20px;
+    color: var(--text-tertiary);
+  }
+
+  .event-step-add {
+    width: 100%;
+    padding: 8px;
+    border: 1px dashed var(--border);
+    background: transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--text-tertiary);
+    font-size: 13px;
+    font-family: inherit;
+    transition: var(--transition);
+    margin-top: 8px;
+  }
+  .event-step-add:hover { border-color: var(--accent); color: var(--accent); }
+
+  .sop-add-category-btn {
+    width: 100%;
+    padding: 12px;
+    border: 1px dashed var(--border);
+    background: transparent;
+    border-radius: var(--radius);
+    cursor: pointer;
+    color: var(--text-tertiary);
+    font-size: 14px;
+    font-family: inherit;
+    transition: var(--transition);
+    margin-top: 4px;
+  }
+  .sop-add-category-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── Inspiration Page ── */
+  .inspiration-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .inspiration-card {
+    padding: 16px;
+    background: #fafafa;
+    border-radius: var(--radius);
+    transition: var(--transition);
+    position: relative;
+  }
+  .inspiration-card:hover { background: #f3f3f3; }
+  .inspiration-text {
+    font-size: 15px;
+    line-height: 1.6;
+    margin-bottom: 8px;
+  }
+  .inspiration-meta {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .inspiration-delete {
+    border: none; background: none;
+    cursor: pointer; color: var(--text-tertiary);
+    font-size: 14px;
+    transition: var(--transition);
+    opacity: 0;
+  }
+  .inspiration-card:hover .inspiration-delete { opacity: 1; }
+  .inspiration-delete:hover { color: #ff3b30; }
+
+  /* ── My Page ── */
+  .profile-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 0 20px;
+    gap: 20px;
+  }
+  .avatar-wrap {
+    position: relative;
+    cursor: pointer;
+  }
+  .avatar {
+    width: 96px; height: 96px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #a5b4fc, #c4b5fd);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 40px;
+    color: #fff;
+    overflow: hidden;
+    transition: var(--transition);
+    box-shadow: 0 4px 16px rgba(99,102,241,0.2);
+  }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .avatar:hover { opacity: 0.9; transform: scale(1.03); }
+  .avatar-edit-hint {
+    position: absolute;
+    bottom: 2px; right: 2px;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+    border: 3px solid var(--bg);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  }
+  .nickname-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .nickname {
+    font-size: 22px;
+    font-weight: 600;
+    border: none;
+    background: transparent;
+    text-align: center;
+    font-family: inherit;
+    color: var(--text);
+    outline: none;
+    max-width: 200px;
+    letter-spacing: 0.5px;
+  }
+  .nickname:focus {
+    border-bottom: 2px solid var(--accent);
+  }
+  .nickname-edit {
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: var(--text-tertiary);
+    font-size: 14px;
+    transition: var(--transition);
+  }
+  .nickname-edit:hover { color: var(--accent); }
+
+  .profile-stats {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+    width: 100%;
+    padding: 0 20px;
+    box-sizing: border-box;
+  }
+  .stat-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    background: #f8f6ff;
+    border-radius: 14px;
+    padding: 16px 8px;
+  }
+  .stat-num { font-size: 24px; font-weight: 700; color: var(--accent); }
+  .stat-label { font-size: 12px; color: var(--text-secondary); font-weight: 500; }
+
+  .profile-menu {
+    margin-top: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+  }
+  .profile-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 18px;
+    border: none;
+    background: #fafafa;
+    cursor: pointer;
+    font-size: 15px;
+    color: var(--text);
+    font-family: inherit;
+    border-radius: 14px;
+    transition: var(--transition);
+    text-align: left;
+    width: 100%;
+    font-weight: 500;
+  }
+  .profile-menu-item:hover { background: #f0edff; color: var(--accent); }
+  .profile-menu-item svg { width: 22px; height: 22px; color: var(--text-tertiary); transition: var(--transition); }
+  .profile-menu-item:hover svg { color: var(--accent); }
+  .profile-menu-item .arrow { margin-left: auto; color: var(--text-tertiary); font-size: 16px; }
+  .profile-menu-item.danger { color: #ef4444; background: #fef2f2; }
+  .profile-menu-item.danger:hover { background: #fde8e8; }
+  .profile-menu-item.danger svg { color: #ef4444; }
+
+  /* ── Modal ── */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.3);
+    z-index: 200;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+  }
+  .modal-overlay.hidden { display: none; }
+  .modal {
+    background: var(--bg);
+    border-radius: 20px 20px 0 0;
+    padding: 20px 20px 32px;
+    width: 100%;
+    max-width: 430px;
+    max-height: 80vh;
+    overflow-y: auto;
+    animation: slideUp 0.3s ease;
+  }
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+  .modal h3 {
+    font-size: 17px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    text-align: center;
+  }
+  .modal-input {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 15px;
+    font-family: inherit;
+    outline: none;
+    transition: var(--transition);
+    margin-bottom: 12px;
+  }
+  .modal-input:focus { border-color: var(--accent); }
+  .modal-textarea {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 15px;
+    font-family: inherit;
+    outline: none;
+    resize: vertical;
+    min-height: 100px;
+    transition: var(--transition);
+    margin-bottom: 12px;
+  }
+  .modal-textarea:focus { border-color: var(--accent); }
+  .modal-select {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 15px;
+    font-family: inherit;
+    outline: none;
+    background: var(--bg);
+    margin-bottom: 12px;
+    cursor: pointer;
+  }
+  .modal-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 8px;
+  }
+  .modal-btn {
+    flex: 1;
+    padding: 12px;
+    border-radius: var(--radius-sm);
+    border: none;
+    font-size: 15px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 500;
+    transition: var(--transition);
+  }
+  .modal-btn.primary {
+    background: var(--accent);
+    color: #fff;
+  }
+  .modal-btn.primary:hover { opacity: 0.85; }
+  .modal-btn.secondary {
+    background: var(--accent-light);
+    color: var(--text);
+  }
+  .modal-btn.secondary:hover { background: #e0e0e0; }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed;
+    top: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--accent);
+    color: #fff;
+    padding: 10px 24px;
+    border-radius: 20px;
+    font-size: 14px;
+    z-index: 300;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  .toast.show { opacity: 1; }
+
+  /* ── Quick-type chooser after voice ── */
+  .quick-choose {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 20px;
+    justify-content: center;
+  }
+  .quick-chip {
+    padding: 10px 18px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: #fafafa;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-weight: 500;
+    transition: all 0.2s ease;
+  }
+  .quick-chip:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: #f0edff;
+  }
+  .quick-chip.highlighted {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: #f0edff;
+    font-weight: 600;
+  }
+  .quick-chip.auto-undo {
+    border-color: var(--border);
+    color: var(--text-secondary);
+    font-size: 12px;
+    padding: 6px 14px;
+  }
+  .quick-chip.auto-undo:hover {
+    border-color: #ff3b30;
+    color: #ff3b30;
+  }
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+
+  <!-- ====== TOAST ====== -->
+  <div class="toast" id="toast"></div>
+
+  <!-- ====== HOME PAGE ====== -->
+  <div class="page home-page active" id="page-home">
+    <div class="home-brand">SnapMemo</div>
+    <div class="voice-btn-wrap">
+      <button class="voice-btn" id="voiceBtn" title="语音输入">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="1" width="6" height="12" rx="3"/>
+          <path d="M5 10a7 7 0 0 0 14 0"/>
+          <line x1="12" y1="17" x2="12" y2="23"/>
+          <line x1="8" y1="21" x2="16" y2="21"/>
+        </svg>
+      </button>
+      <span class="voice-label" id="voiceLabel">点击说话</span>
+    </div>
+    <div class="voice-transcript" id="voiceTranscript"></div>
+    <div class="text-input-wrap hidden" id="textInputWrap">
+      <input type="text" class="text-input" id="textInput" placeholder="或者直接打字输入...">
+      <button class="text-send-btn" id="textSendBtn">发送</button>
+    </div>
+    <div class="quick-choose hidden" id="quickChoose"></div>
+  </div>
+
+  <!-- ====== SCHEDULE PAGE ====== -->
+  <div class="page" id="page-schedule">
+    <div class="page-header">
+      <button class="home-btn" title="返回首页">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 12l9-9 9 9"/><path d="M5 10v10a1 1 0 001 1h3a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h3a1 1 0 001-1V10"/>
+        </svg>
+      </button>
+      <h1>日程</h1>
+      <button class="add-btn" id="scheduleAddBtn">+</button>
+    </div>
+    <div class="main-content">
+      <div class="schedule-tabs" id="scheduleTabs">
+        <button class="schedule-tab active" data-tab="day">日</button>
+        <button class="schedule-tab" data-tab="week">周</button>
+        <button class="schedule-tab" data-tab="month">月</button>
+      </div>
+      <div class="schedule-date-label" id="scheduleDateLabel"></div>
+      <div class="schedule-list" id="scheduleList"></div>
+    </div>
+  </div>
+
+  <!-- ====== SOP PAGE ====== -->
+  <div class="page" id="page-sop">
+    <div class="page-header">
+      <button class="home-btn" title="返回首页">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 12l9-9 9 9"/><path d="M5 10v10a1 1 0 001 1h3a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h3a1 1 0 001-1V10"/>
+        </svg>
+      </button>
+      <h1>SOP</h1>
+      <div></div>
+    </div>
+    <div class="main-content">
+      <div class="sop-categories" id="sopTabs">
+        <button class="sop-cat-tab active" data-tab="daily">日常 SOP</button>
+        <button class="sop-cat-tab" data-tab="event">事件 SOP</button>
+      </div>
+      <div id="sopDailyContent"></div>
+      <div id="sopEventContent" style="display:none;"></div>
+    </div>
+  </div>
+
+  <!-- ====== INSPIRATION PAGE ====== -->
+  <div class="page" id="page-inspiration">
+    <div class="page-header">
+      <button class="home-btn" title="返回首页">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 12l9-9 9 9"/><path d="M5 10v10a1 1 0 001 1h3a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h3a1 1 0 001-1V10"/>
+        </svg>
+      </button>
+      <h1>灵感</h1>
+      <button class="add-btn" id="inspirationAddBtn">+</button>
+    </div>
+    <div class="main-content">
+      <div class="inspiration-grid" id="inspirationGrid"></div>
+    </div>
+  </div>
+
+  <!-- ====== MY PAGE ====== -->
+  <div class="page" id="page-my">
+    <div class="page-header">
+      <button class="home-btn" title="返回首页">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 12l9-9 9 9"/><path d="M5 10v10a1 1 0 001 1h3a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h3a1 1 0 001-1V10"/>
+        </svg>
+      </button>
+      <h1>我的</h1><div></div></div>
+    <div class="main-content">
+      <div class="profile-section">
+        <div class="avatar-wrap" id="avatarWrap">
+          <div class="avatar" id="avatarDisplay">👤</div>
+          <div class="avatar-edit-hint">✎</div>
+        </div>
+        <div class="nickname-wrap">
+          <input class="nickname" id="nicknameInput" value="未命名用户" maxlength="20">
+          <button class="nickname-edit" id="nicknameEditBtn" title="修改昵称">✎</button>
+        </div>
+        <div class="profile-stats">
+          <div class="stat-item">
+            <span class="stat-num" id="statSchedules">0</span>
+            <span class="stat-label">日程</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-num" id="statSops">0</span>
+            <span class="stat-label">SOP</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-num" id="statInspirations">0</span>
+            <span class="stat-label">灵感</span>
+          </div>
+        </div>
+        <div class="profile-menu">
+          <button class="profile-menu-item" id="exportDataBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            导出数据
+            <span class="arrow">›</span>
+          </button>
+          <button class="profile-menu-item" id="importDataBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            导入数据
+            <span class="arrow">›</span>
+          </button>
+          <button class="profile-menu-item danger" id="clearDataBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            清除全部数据
+            <span class="arrow">›</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== BOTTOM NAV ====== -->
+  <nav class="bottom-nav" id="bottomNav">
+    <button class="nav-item" data-page="schedule">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2"/>
+        <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+        <line x1="3" y1="10" x2="21" y2="10"/>
+        <rect x="8" y="14" width="3" height="3" rx="0.5"/>
+        <rect x="13" y="14" width="3" height="3" rx="0.5"/>
+      </svg>
+      <span>日程</span>
+    </button>
+    <button class="nav-item" data-page="sop">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="4" y="3" width="16" height="18" rx="2"/>
+        <line x1="8" y1="8" x2="16" y2="8"/>
+        <line x1="8" y1="12" x2="16" y2="12"/>
+        <line x1="8" y1="16" x2="12" y2="16"/>
+      </svg>
+      <span>SOP</span>
+    </button>
+    <button class="nav-item" data-page="inspiration">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.062 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .962L15.5 14.063a2 2 0 0 0-1.437 1.436l-1.582 6.135a.5.5 0 0 1-.962 0z"/>
+      </svg>
+      <span>灵感</span>
+    </button>
+    <button class="nav-item" data-page="my">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="8" r="4"/>
+        <path d="M4 20c0-4.418 3.582-8 8-8s8 3.582 8 8"/>
+      </svg>
+      <span>我的</span>
+    </button>
+  </nav>
+
+  <!-- ====== MODAL OVERLAY ====== -->
+  <div class="modal-overlay hidden" id="modalOverlay">
+    <div class="modal" id="modalContent"></div>
+  </div>
+
+  <!-- Hidden file inputs -->
+  <input type="file" accept="image/*" id="avatarInput" style="display:none;">
+  <input type="file" accept=".json" id="importInput" style="display:none;">
+</div>
+
+<script>
+// ============================================================
+// DATA LAYER
+// ============================================================
+const STORAGE_KEY = 'instant_memory_data';
+
+function loadData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return getDefaultData();
+}
+
+function getDefaultData() {
+  return {
+    profile: { nickname: '未命名用户', avatar: '' },
+    schedules: [],
+    dailySOPs: [
+      {
+        id: 'cat-1',
+        name: '出门必备',
+        items: [
+          { id: 'item-1', text: '手机', checked: false },
+          { id: 'item-2', text: '钥匙', checked: false },
+          { id: 'item-3', text: '钱包/卡包', checked: false },
+          { id: 'item-4', text: '充电宝', checked: false },
+        ]
+      },
+      {
+        id: 'cat-2',
+        name: '考试必备',
+        items: [
+          { id: 'item-5', text: '准考证', checked: false },
+          { id: 'item-6', text: '身份证', checked: false },
+          { id: 'item-7', text: '2B铅笔', checked: false },
+          { id: 'item-8', text: '黑色签字笔', checked: false },
+        ]
+      },
+      {
+        id: 'cat-3',
+        name: '回家必备',
+        items: [
+          { id: 'item-9', text: '给家人带礼物', checked: false },
+          { id: 'item-10', text: '车票/机票', checked: false },
+          { id: 'item-11', text: '充电线', checked: false },
+        ]
+      }
+    ],
+    eventSOPs: [
+      {
+        id: 'esop-1',
+        title: '发布新版本上线流程',
+        steps: [
+          { id: 's1', text: '代码审查通过' },
+          { id: 's2', text: '合并到主分支' },
+          { id: 's3', text: '运行自动化测试' },
+          { id: 's4', text: '构建生产版本' },
+          { id: 's5', text: '灰度发布 5% 流量' },
+          { id: 's6', text: '监控指标正常后全量发布' },
+        ]
+      }
+    ],
+    inspirations: []
+  };
+}
+
+function saveData(data) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+let data = loadData();
+
+// ============================================================
+// STATE
+// ============================================================
+let currentPage = 'home';
+let scheduleTab = 'day';
+let sopTab = 'daily';
+let isListening = false;
+let recognition = null;
+
+// ============================================================
+// HELPERS
+// ============================================================
+function $(sel) { return document.querySelector(sel); }
+function $$(sel) { return document.querySelectorAll(sel); }
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+
+function showToast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timeout);
+  t._timeout = setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+function openModal(html) {
+  $('#modalContent').innerHTML = html;
+  $('#modalOverlay').classList.remove('hidden');
+}
+
+function closeModal() {
+  $('#modalOverlay').classList.add('hidden');
+}
+
+$('#modalOverlay').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+function navigateTo(page, direction) {
+  if (page === currentPage) return;
+
+  const oldPage = $(`#page-${currentPage}`);
+  const newPage = $(`#page-${page}`);
+
+  // Determine animation direction
+  const goingHome = page === 'home';
+  const comingFromHome = currentPage === 'home';
+
+  // Remove all animation classes from all pages
+  $$('.page').forEach(p => {
+    p.classList.remove('exit-left', 'exit-right', 'enter-left');
+  });
+
+  if (oldPage && newPage) {
+    if (goingHome) {
+      // Current page slides out to the right, home enters from left
+      oldPage.classList.add('exit-right');
+      newPage.classList.add('enter-left');
+    } else {
+      // Old page slides out to the left, new page slides in from right
+      oldPage.classList.add('exit-left');
+    }
+  }
+
+  // Activate new page (triggers slide-in animation)
+  $$('.page').forEach(p => p.classList.remove('active'));
+  if (newPage) {
+    // Force reflow so enter-left takes effect before adding active
+    if (goingHome) {
+      void newPage.offsetWidth;
+      newPage.classList.remove('enter-left');
+    }
+    newPage.classList.add('active');
+  }
+
+  // Clean up animation classes after transition
+  setTimeout(() => {
+    $$('.page').forEach(p => {
+      p.classList.remove('exit-left', 'exit-right', 'enter-left');
+    });
+    if (oldPage) oldPage.classList.remove('active');
+  }, 350);
+
+  currentPage = page;
+
+  // Update bottom nav
+  $$('.nav-item').forEach(n => n.classList.remove('active'));
+  const navItem = $(`.nav-item[data-page="${page}"]`);
+  if (navItem) navItem.classList.add('active');
+
+  // Render on navigate
+  if (page === 'schedule') renderSchedule();
+  if (page === 'sop') renderSOP();
+  if (page === 'inspiration') renderInspirations();
+  if (page === 'my') renderMy();
+  if (page === 'home') renderHome();
+}
+
+$('#bottomNav').addEventListener('click', function(e) {
+  const btn = e.target.closest('.nav-item');
+  if (!btn) return;
+  navigateTo(btn.dataset.page);
+});
+
+// Home button in page headers
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('.home-btn');
+  if (btn) navigateTo('home');
+});
+
+// ============================================================
+// HOME PAGE
+// ============================================================
+function renderHome() {
+  // Reset voice state
+  $('#voiceTranscript').textContent = '';
+  $('#quickChoose').classList.add('hidden');
+  $('#voiceLabel').textContent = '点击说话';
+}
+
+// ============================================================
+// VOICE INPUT
+// ============================================================
+function initSpeechRecognition() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    showToast('当前浏览器不支持语音输入');
+    return null;
+  }
+  const rec = new SpeechRecognition();
+  rec.lang = 'zh-CN';
+  rec.interimResults = false;
+  rec.continuous = false;
+  rec.maxAlternatives = 1;
+
+  rec.onresult = function(e) {
+    const text = e.results[0][0].transcript.trim();
+    if (text) {
+      $('#voiceTranscript').textContent = `"${text}"`;
+      showQuickChoose(text);
+    }
+  
+    isListening = false;
+    $('#voiceBtn').classList.remove('listening');
+    $('#voiceLabel').textContent = '点击说话';
+  };
+
+  rec.onerror = function(e) {
+    isListening = false;
+    $('#voiceBtn').classList.remove('listening');
+    $('#voiceLabel').textContent = '点击说话';
+    switch (e.error) {
+      case 'not-allowed':
+        showToast('麦克风权限被拒绝，请在浏览器设置中允许麦克风，或使用下方输入框');
+        break;
+      case 'audio-capture':
+        showToast('未检测到麦克风设备');
+        break;
+      case 'network':
+        showToast('语音识别需要网络连接，请检查网络后重试');
+        break;
+      case 'no-speech':
+        // 静默，用户可能只是没说话
+        break;
+      case 'aborted':
+        break;
+      default:
+        showToast('语音识别失败（' + e.error + '），可使用下方输入框');
+    }
+    // 语音失败时展开文字输入框
+    $('#textInputWrap').classList.remove('hidden');
+  };
+
+  rec.onend = function() {
+    isListening = false;
+    $('#voiceBtn').classList.remove('listening');
+    $('#voiceLabel').textContent = '点击说话';
+  };
+
+  return rec;
+}
+
+// ── AI Semantic Classification Engine ──
+// Multi-dimensional weighted scoring instead of keyword matching.
+// Each category is scored across 5+ semantic dimensions, then the
+// highest-scoring category wins. Confidence is based on score dominance.
+
+function aiClassify(text) {
+  // Normalize: keep original for display, create clean version for analysis
+  const raw = text;
+  const t = raw.toLowerCase()
+    .replace(/[，。！？、；：""''（）「」『』【】《》（）\s]+/g, ' ')
+    .trim();
+  const len = t.length;
+  const words = t.split(' ').filter(w => w.length > 0);
+
+  // =====================
+  // Dimension 1: Temporal Presence (time-bound events → schedule)
+  // =====================
+  const timeScore = (() => {
+    let s = 0;
+    // Absolute dates
+    if (/(\d+月\d+[号日])|(\d+[\.\-\/]\d+)|(几月几号)|(哪天)/.test(t)) s += 30;
+    // Relative dates
+    if (/今天|今日|今儿|明天|明日|后天|后日|大后天|昨天|前天/.test(t)) s += 25;
+    if (/下周[一二三四五六日天]|下下周|周[一二三四五六日天]|星期[一二三四五六日天]/.test(t)) s += 20;
+    // Time of day
+    if (/早上|上午|中午|下午|傍晚|晚上|凌晨|半夜/.test(t)) s += 20;
+    if (/\d+[点:：]\d*/.test(t) || /几点|点半|点整/.test(t)) s += 25;
+    // Time quantities
+    if (/\d+[个]?[时小天周月]/.test(t)) s += 15;
+    // Deadline pressure
+    if (/截止|ddl|deadline|到期|过期|之前要|之前.*完成/.test(t)) s += 28;
+    // Future-oriented time
+    if (/马上|即将|快要|就要|后天|下周|下个?月/.test(t)) s += 15;
+    return s;
+  })();
+
+  // =====================
+  // Dimension 2: Event Nature (appointment/meeting/trip → schedule)
+  // =====================
+  const eventScore = (() => {
+    let s = 0;
+    if (/开会|会议|见面|约会|碰头|碰面|聚餐|饭局/.test(t)) s += 25;
+    if (/面试|笔试|考试|答辩|汇报|报告|演讲|分享/.test(t)) s += 20;
+    if (/航班|火车|高铁|飞机|动车|大巴|出发|起飞|登机/.test(t)) s += 22;
+    if (/去医院|看医生|体检|挂号|复诊|看病/.test(t)) s += 18;
+    if (/上课|下课|课程|培训|讲座|网课/.test(t)) s += 16;
+    if (/生日|婚礼|葬礼|聚会|party|派对|庆典/.test(t)) s += 18;
+    if (/去.{1,4}[市省国]|出差|旅行|旅游|出行/.test(t)) s += 12;
+    return s;
+  })();
+
+  // =====================
+  // Dimension 3: Reminder / Checklist Tone (daily SOP)
+  // =====================
+  const reminderScore = (() => {
+    let s = 0;
+    // Strong reminder markers
+    if (/[记别千一]?[万定]?忘[记了]|记得|别忘了|别忘记|不要忘|千万别|一定要记住/.test(t)) s += 30;
+    // Imperative + item
+    if (/[带拿装背捎拎提备][上着好]|带上|拿着|背着|装着|捎上|拎着/.test(t)) s += 25;
+    // Context-anchored imperatives
+    if (/出门|外出|离家|上学|上班|回家|返乡|出差/.test(t)) s += 18;
+    if (/考试|考场|笔试|面试/.test(t)) s += 15;
+    // Checklist vocabulary
+    if (/清单|checklist|必备|必需品|一定要有|不能少/.test(t)) s += 22;
+    if (/东西|物品|物件|装备|用具/.test(t)) s += 10;
+    // Route/transit
+    if (/坐[几哪]路|公交|地铁|几号线|怎么去|路线|交通|通勤/.test(t)) s += 16;
+    // Packing language
+    if (/收拾|整理|打包|准备.*东西|收拾.*行李/.test(t)) s += 20;
+    return s;
+  })();
+
+  // =====================
+  // Dimension 4: Process / Sequence (event SOP)
+  // =====================
+  const processScore = (() => {
+    let s = 0;
+    // Explicit sequence markers
+    if (/第[一二三四五六七八九十\d]+[步个条]|步骤[一二三四五六七八九十\d]/.test(t)) s += 32;
+    // Sequential connectors
+    if (/首先.*然后|先.*再.*然后|先.*接着|首先.*其次|首先.*接着/.test(t)) s += 30;
+    if (/然后|接着|之后|下一步|接下来|最后/.test(t)) s += 15;
+    // Process nouns
+    if (/步骤|流程|工序|环节|sop|标准操作|操作手册|操作规程/.test(t)) s += 28;
+    // Project completion / deployment
+    if (/上线|发布|部署|发版|投产|灰度|回滚|热修复/.test(t)) s += 25;
+    if (/做完|完成|搞定|弄完|结束|收尾/.test(t)) s += 12;
+    // Instructional tone
+    if (/应该[先再]|需要[先再]|要[先再]|必须先/.test(t)) s += 18;
+    if (/检查|确认|验证|测试|审核|审批/.test(t)) s += 10;
+    // How-to language
+    if (/怎么[做弄搞]|如何操作|怎么做/.test(t)) s += 15;
+    return s;
+  })();
+
+  // =====================
+  // Dimension 5: Creative / Exploratory (inspiration)
+  // =====================
+  const creativeScore = (() => {
+    let s = 0;
+    // Idea markers
+    if (/想法|灵感|创意|点子|念头|突发奇想|灵光|脑洞/.test(t)) s += 30;
+    if (/突然想到|忽然想到|突然觉得|猛地想到|想起.{1,3}事/.test(t)) s += 28;
+    // Exploratory / hypothetical
+    if (/也许|或许|大概|可能|说不定|没准|搞不好/.test(t)) s += 22;
+    if (/不如|要不|试试|试一下|尝试|试着|试看看/.test(t)) s += 20;
+    if (/如果|假设|假如|要是|万一|倘若/.test(t)) s += 18;
+    // Subjective evaluation
+    if (/有意思|有趣|不错|挺好|蛮好|好像可以|感觉.*可以/.test(t)) s += 16;
+    if (/这个.*怎么样|好主意|好想法|妙啊/.test(t)) s += 14;
+    // Writing / recording intent
+    if (/记下来|写下来|保存一下|记录下来|备忘/.test(t)) s += 12;
+    // Abstract / philosophical
+    if (/人生|意义|价值|本质|到底是什么|为什么.*存在/.test(t)) s += 10;
+    // Pattern: "我发现..." "我注意到..." "我意识到..."
+    if (/我发现|我注意到|我意识到|我体会到/.test(t)) s += 15;
+    return s;
+  })();
+
+  // =====================
+  // Dimension 6: Structural Analysis
+  // =====================
+  const structuralScore = (() => {
+    const result = { schedule: 0, 'daily-sop': 0, 'event-sop': 0, inspiration: 0 };
+
+    // Very short with item keyword → more like daily SOP
+    if (len <= 6 && /[带拿装背捎]/.test(t)) result['daily-sop'] += 15;
+
+    // Multi-sentence with numbers → more like event SOP
+    const sentences = raw.split(/[。！？\n]/).filter(s => s.trim());
+    if (sentences.length >= 3) result['event-sop'] += 10;
+
+    // Contains "什么时候" or "几点" → schedule
+    if (/什么时候|几点|几时|何时|啥时候/.test(t)) result.schedule += 20;
+
+    // Contains question marks → more likely inspiration or schedule
+    if (raw.includes('？') || raw.includes('?')) {
+      if (/什么时候|几点|在哪/.test(t)) result.schedule += 8;
+      else result.inspiration += 8;
+    }
+
+    // Exclamation → more likely daily SOP (urgency) or inspiration (excitement)
+    if (raw.includes('！') || raw.includes('!')) {
+      if (/记得|别忘了|快|赶紧|马上/.test(t)) result['daily-sop'] += 8;
+      else result.inspiration += 5;
+    }
+
+    // Very long text → more likely event SOP or inspiration
+    if (len > 50) {
+      result['event-sop'] += 5;
+      result.inspiration += 5;
+    }
+
+    // Starts with verb → more likely daily SOP (imperative)
+    if (/^[记别带拿装背捎去回考试准].{0,3}/.test(raw)) result['daily-sop'] += 8;
+
+    return result;
+  })();
+
+  // =====================
+  // Compute Final Scores
+  // =====================
+  const scores = {
+    schedule:    timeScore + eventScore + structuralScore.schedule,
+    'daily-sop': reminderScore + structuralScore['daily-sop'],
+    'event-sop': processScore + structuralScore['event-sop'],
+    inspiration: creativeScore + structuralScore.inspiration + 3, // slight default bias
+  };
+
+  // Find highest and second-highest
+  const entries = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+  const [best, second] = entries;
+  const gap = best[1] - second[1];
+  const total = best[1] + second[1] || 1;
+  const dominance = gap / total; // 0 to 1, how dominant is the winner
+
+  // Confidence levels based on score dominance
+  let confidence;
+  if (dominance > 0.5 || best[1] > 60) {
+    confidence = 'high';
+  } else if (dominance > 0.25 || best[1] > 30) {
+    confidence = 'medium';
+  } else {
+    confidence = 'low';
+  }
+
+  // If all scores are very low (< 5), default to inspiration with low confidence
+  if (best[1] < 5) {
+    return { type: 'inspiration', confidence: 'low', scores };
+  }
+
+  return { type: best[0], confidence, scores };
+}
+
+// Backward-compatible alias
+function autoClassify(text) { return aiClassify(text); }
+
+const typeLabels = {
+  'schedule': '📅 日程',
+  'daily-sop': '📋 日常 SOP',
+  'event-sop': '🔁 事件 SOP',
+  'inspiration': '💡 灵感'
+};
+
+function fmtDate(d) { return d.toISOString().split('T')[0]; }
+function fmtTime(d) { return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
+
+// Parse Chinese date expressions from voice/text input
+function parseDateFromText(text) {
+  const t = text.replace(/\s/g, '');
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // "今天" / "今日" / "今儿"
+  if (/今天|今日|今儿|今天内|今日内/.test(t)) return fmtDate(today);
+
+  // "明天" / "明日"
+  if (/明天|明日/.test(t)) return fmtDate(new Date(today.getTime() + 86400000));
+  // "后天" / "后日"
+  if (/后天|后日/.test(t)) return fmtDate(new Date(today.getTime() + 172800000));
+  // "大后天"
+  if (/大后天/.test(t)) return fmtDate(new Date(today.getTime() + 259200000));
+
+  // "X天后" / "X天之后" / "过X天"
+  const xd = t.match(/(\d+)天后|(\d+)天之后|过(\d+)天/);
+  if (xd) {
+    const n = parseInt(xd[1] || xd[2] || xd[3]);
+    const d = new Date(today.getTime() + n * 86400000);
+    return fmtDate(d);
+  }
+
+  // "下周X" / "下星期X"
+  const nx = t.match(/下(?:星期|周)([一二三四五六日天])/);
+  if (nx) {
+    const dm = { '一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'日':0,'天':0 };
+    const td = dm[nx[1]];
+    const d = new Date(today);
+    const gap = (td + 7 - d.getDay()) % 7;
+    d.setDate(d.getDate() + (gap === 0 ? 7 : gap));
+    return fmtDate(d);
+  }
+
+  // "周X" / "星期X" (this week)
+  const wx = t.match(/(?<![下])(?:星期|周)([一二三四五六日天])/);
+  if (wx) {
+    const dm = { '一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'日':0,'天':0 };
+    const td = dm[wx[1]];
+    const d = new Date(today);
+    const gap = (td + 7 - d.getDay()) % 7;
+    d.setDate(d.getDate() + gap);
+    return fmtDate(d);
+  }
+
+  // "X月X日" / "X月X号"
+  const md = t.match(/(\d{1,2})月(\d{1,2})[日号]/);
+  if (md) {
+    const m = parseInt(md[1]) - 1;
+    const day = parseInt(md[2]);
+    let d = new Date(today.getFullYear(), m, day);
+    if (d < today) d = new Date(today.getFullYear() + 1, m, day);
+    return fmtDate(d);
+  }
+
+  // "X月X" (bare month-day, like "8月5")
+  const mds = t.match(/(\d{1,2})月(\d{1,2})\b/);
+  if (mds) {
+    const m = parseInt(mds[1]) - 1;
+    const day = parseInt(mds[2]);
+    if (day <= 31) {
+      let d = new Date(today.getFullYear(), m, day);
+      if (d < today) d = new Date(today.getFullYear() + 1, m, day);
+      return fmtDate(d);
+    }
+  }
+
+  // Default: today
+  return fmtDate(today);
+}
+
+// Parse time expressions
+function parseTimeFromText(text) {
+  const t = text.replace(/\s/g, '');
+
+  // "HH:MM" or "HH：MM"
+  const hm = t.match(/(\d{1,2})[：:](\d{2})/);
+  if (hm) return `${String(parseInt(hm[1])).padStart(2,'0')}:${hm[2]}`;
+
+  // "X点" / "X点半" / "X点X分"
+  const hp = t.match(/(\d{1,2})点(半|(\d+)分)?/);
+  if (hp) {
+    if (hp[2] === '半') return `${String(parseInt(hp[1])).padStart(2,'0')}:30`;
+    if (hp[3]) return `${String(parseInt(hp[1])).padStart(2,'0')}:${String(parseInt(hp[3])).padStart(2,'0')}`;
+    return `${String(parseInt(hp[1])).padStart(2,'0')}:00`;
+  }
+
+  // "下午X点" / "晚上X点" → adjust to 24h
+  const pm = t.match(/(下午|晚上|傍晚)(\d{1,2})点/);
+  if (pm) {
+    let h = parseInt(pm[2]);
+    if (h < 12) h += 12;
+    return `${String(h).padStart(2,'0')}:00`;
+  }
+  const pmh = t.match(/(下午|晚上|傍晚)(\d{1,2})点半/);
+  if (pmh) {
+    let h = parseInt(pmh[2]);
+    if (h < 12) h += 12;
+    return `${String(h).padStart(2,'0')}:30`;
+  }
+
+  // Generic time-of-day markers
+  if (/早上/.test(t)) return '08:00';
+  if (/上午/.test(t)) return '09:00';
+  if (/中午/.test(t)) return '12:00';
+  if (/下午/.test(t)) return '15:00';
+  if (/傍晚/.test(t)) return '17:30';
+  if (/晚上/.test(t)) return '19:00';
+  if (/凌晨/.test(t)) return '02:00';
+
+  return '';
+}
+
+function executeVoiceAction(type, text) {
+  if (type === 'schedule') {
+    const dateStr = parseDateFromText(text);
+    const timeStr = parseTimeFromText(text);
+    data.schedules.unshift({ id: uid(), title: text, date: dateStr, time: timeStr });
+    saveData(data);
+    showToast('已添加到日程');
+  } else if (type === 'daily-sop') {
+    openAddDailyItemModal(text);
+  } else if (type === 'event-sop') {
+    data.eventSOPs.unshift({ id: uid(), title: text, steps: [{ id: uid(), text: '步骤 1' }] });
+    saveData(data);
+    showToast('已创建事件 SOP');
+  } else if (type === 'inspiration') {
+    data.inspirations.unshift({ id: uid(), text, date: new Date().toISOString() });
+    saveData(data);
+    showToast('已保存灵感');
+  }
+}
+
+function showQuickChoose(text) {
+  const result = autoClassify(text);
+  const wrap = $('#quickChoose');
+  wrap.classList.remove('hidden');
+
+  // For high confidence: show result + auto-execute after a brief moment,
+  // with an undo / "不对，手动选" option
+  // For medium/low: show the chooser with the detected one highlighted
+
+  if (result.confidence === 'high') {
+    executeVoiceAction(result.type, text);
+    const label = typeLabels[result.type];
+    wrap.innerHTML = `
+      <span style="font-size:13px;color:var(--text-secondary);width:100%;text-align:center;">自动识别为 <strong style="color:var(--accent);">${label}</strong></span>
+      <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;justify-content:center;">
+        <button class="quick-chip auto-undo">↩ 不对，重选</button>
+      </div>
+    `;
+    wrap.querySelector('.auto-undo').addEventListener('click', function() {
+      wrap.classList.add('hidden');
+      // Remove the just-added item
+      if (result.type === 'schedule') {
+        data.schedules.shift();
+      } else if (result.type === 'event-sop') {
+        data.eventSOPs.shift();
+      } else if (result.type === 'inspiration') {
+        data.inspirations.shift();
+      }
+      saveData(data);
+      // Show full manual chooser
+      renderFullChooser(wrap, text);
+    });
+    // Auto-hide after 4 seconds
+    setTimeout(() => {
+      if (!wrap.classList.contains('hidden')) {
+        wrap.classList.add('hidden');
+        $('#voiceTranscript').textContent = '';
+      }
+    }, 4000);
+    return;
+  }
+
+  // Medium / low confidence: show full chooser with highlight
+  renderFullChooser(wrap, text, result.type);
+}
+
+function renderFullChooser(wrap, text, highlightType) {
+  wrap.innerHTML = `
+    <span style="font-size:13px;color:var(--text-tertiary);width:100%;text-align:center;">添加到：</span>
+    <button class="quick-chip${highlightType === 'schedule' ? ' highlighted' : ''}" data-type="schedule">📅 日程</button>
+    <button class="quick-chip${highlightType === 'daily-sop' ? ' highlighted' : ''}" data-type="daily-sop">📋 日常 SOP</button>
+    <button class="quick-chip${highlightType === 'event-sop' ? ' highlighted' : ''}" data-type="event-sop">🔁 事件 SOP</button>
+    <button class="quick-chip${highlightType === 'inspiration' ? ' highlighted' : ''}" data-type="inspiration">💡 灵感</button>
+  `;
+
+  wrap.querySelectorAll('.quick-chip').forEach(chip => {
+    chip.addEventListener('click', function() {
+      const type = this.dataset.type;
+      executeVoiceAction(type, text);
+      wrap.classList.add('hidden');
+      $('#voiceTranscript').textContent = '';
+    });
+  });
+}
+
+$('#voiceBtn').addEventListener('click', function() {
+  if (isListening) {
+    if (recognition) recognition.stop();
+    return;
+  }
+
+  // Check browser support
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    showToast('当前浏览器不支持语音，请直接打字输入');
+    $('#textInputWrap').classList.remove('hidden');
+    $('#textInput').focus();
+    return;
+  }
+
+  if (!recognition) recognition = initSpeechRecognition();
+  if (!recognition) return;
+
+  isListening = true;
+  $('#voiceBtn').classList.add('listening');
+  $('#voiceLabel').textContent = '正在聆听...';
+  $('#voiceTranscript').textContent = '';
+  $('#quickChoose').classList.add('hidden');
+
+  // Safety timeout: if nothing happens within 6s, assume silent failure and fall back to text
+  let safetyTimer = setTimeout(() => {
+    if (isListening) {
+      isListening = false;
+      $('#voiceBtn').classList.remove('listening');
+      $('#voiceLabel').textContent = '点击说话';
+      showToast('语音识别未响应，请直接打字输入');
+      $('#textInputWrap').classList.remove('hidden');
+      $('#textInput').focus();
+      try { recognition.stop(); } catch(e) {}
+    }
+  }, 6000);
+
+  // Monkey-patch onresult/onerror/onend to clear the safety timer
+  const origOnResult = recognition.onresult;
+  const origOnError = recognition.onerror;
+  const origOnEnd = recognition.onend;
+  recognition.onresult = function(e) {
+    clearTimeout(safetyTimer);
+    if (origOnResult) origOnResult.call(recognition, e);
+  };
+  recognition.onerror = function(e) {
+    clearTimeout(safetyTimer);
+    if (origOnError) origOnError.call(recognition, e);
+  };
+  recognition.onend = function() {
+    clearTimeout(safetyTimer);
+    if (origOnEnd) origOnEnd.call(recognition);
+  };
+
+  try {
+    recognition.start();
+  } catch(e) {
+    clearTimeout(safetyTimer);
+    isListening = false;
+    $('#voiceBtn').classList.remove('listening');
+    $('#voiceLabel').textContent = '点击说话';
+    showToast('语音启动失败，请直接打字输入');
+    $('#textInputWrap').classList.remove('hidden');
+  }
+});
+
+// Text input fallback (for mobile or when voice fails)
+function handleTextSubmit() {
+  const input = $('#textInput');
+  const text = input.value.trim();
+  if (!text) return;
+  $('#voiceTranscript').textContent = `"${text}"`;
+  $('#textInputWrap').classList.add('hidden');
+  input.value = '';
+  showQuickChoose(text);
+}
+
+$('#textSendBtn').addEventListener('click', handleTextSubmit);
+$('#textInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') handleTextSubmit();
+});
+
+// ============================================================
+// SCHEDULE PAGE
+// ============================================================
+function getScheduleGroups(tab) {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const groups = [];
+  const days = ['日','一','二','三','四','五','六'];
+
+  if (tab === 'day') {
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(now);
+      d.setDate(d.getDate() + i);
+      const key = fmtDate(d);
+      const isToday = i === 0;
+      groups.push({
+        key,
+        label: isToday ? `${d.getMonth()+1}月${d.getDate()}日 今天` : `${d.getMonth()+1}月${d.getDate()}日 周${days[d.getDay()]}`,
+        start: key, end: key
+      });
+    }
+    return { groups, label: `近7日  ${now.getMonth()+1}月${now.getDate()}日起` };
+  }
+
+  if (tab === 'week') {
+    const day = now.getDay();
+    const thisMonday = new Date(now);
+    thisMonday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+    for (let w = 0; w < 4; w++) {
+      const mon = new Date(thisMonday);
+      mon.setDate(thisMonday.getDate() + w * 7);
+      const sun = new Date(mon);
+      sun.setDate(mon.getDate() + 6);
+      const isThis = w === 0;
+      groups.push({
+        key: `w${w+1}`,
+        label: isThis ? `第${w+1}周（本周） ${mon.getMonth()+1}/${mon.getDate()}—${sun.getMonth()+1}/${sun.getDate()}` : `第${w+1}周  ${mon.getMonth()+1}/${mon.getDate()}—${sun.getMonth()+1}/${sun.getDate()}`,
+        start: fmtDate(mon), end: fmtDate(sun)
+      });
+    }
+    return { groups, label: '近4周' };
+  }
+
+  if (tab === 'month') {
+    const yr = now.getFullYear();
+    for (let m = 0; m < 12; m++) {
+      const start = new Date(yr, m, 1);
+      const end = new Date(yr, m + 1, 0);
+      groups.push({
+        key: `m${m+1}`,
+        label: `${m+1}月`,
+        start: fmtDate(start), end: fmtDate(end)
+      });
+    }
+    return { groups, label: `${yr}年` };
+  }
+}
+
+function renderSchedule() {
+  const { groups, label } = getScheduleGroups(scheduleTab);
+  $('#scheduleDateLabel').textContent = label;
+
+  const groupMap = {};
+  groups.forEach(g => { groupMap[g.key] = []; });
+
+  data.schedules.forEach(s => {
+    for (const g of groups) {
+      if (s.date >= g.start && s.date <= g.end) {
+        groupMap[g.key].push(s);
+        break;
+      }
+    }
+  });
+  Object.values(groupMap).forEach(arr => arr.sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    return (a.time || '').localeCompare(b.time || '');
+  }));
+
+  const list = $('#scheduleList');
+  let html = '', hasAny = false;
+
+  groups.forEach(g => {
+    const items = groupMap[g.key] || [];
+    if (!items.length) return;
+    hasAny = true;
+    html += `<div class="schedule-group-header">${g.label}</div>`;
+    items.forEach(s => {
+      const d = new Date(s.date);
+      const timeLabel = s.time ? `${formatDateShort(d)} ${s.time}` : formatDateShort(d);
+      html += `<div class="schedule-item">
+        <div class="schedule-content">${escapeHTML(s.title)}</div>
+        <span class="schedule-time-badge">${timeLabel}</span>
+        <button class="schedule-delete" data-id="${s.id}">×</button>
+      </div>`;
+    });
+  });
+
+  if (!hasAny) {
+    const hints = {
+      day:  { icon:'📅', text:'近7日暂无日程<br><span style="color:var(--text-tertiary);font-size:12px;">切换到「周」或「月」查看更远安排</span>' },
+      week: { icon:'📆', text:'近4周暂无日程<br><span style="color:var(--text-tertiary);font-size:12px;">切换到「月」查看整年安排</span>' },
+      month:{ icon:'🗓', text:'今年暂无日程<br><span style="color:var(--text-tertiary);font-size:12px;">使用语音或 + 添加新日程</span>' }
+    };
+    const h = hints[scheduleTab] || hints.day;
+    html = `<div class="empty-state"><span class="empty-icon">${h.icon}</span>${h.text}</div>`;
+  }
+
+  list.innerHTML = html;
+  list.querySelectorAll('.schedule-delete').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      data.schedules = data.schedules.filter(s => s.id !== this.dataset.id);
+      saveData(data);
+      renderSchedule();
+      showToast('已删除');
+    });
+  });
+}
+
+function formatDateCN(d) {
+  const days = ['日','一','二','三','四','五','六'];
+  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 星期${days[d.getDay()]}`;
+}
+function formatDateShort(d) {
+  return `${d.getMonth()+1}月${d.getDate()}日`;
+}
+function formatTime(d) {
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+$('#scheduleTabs').addEventListener('click', function(e) {
+  const tab = e.target.closest('.schedule-tab');
+  if (!tab) return;
+  scheduleTab = tab.dataset.tab;
+  $$('#scheduleTabs .schedule-tab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  renderSchedule();
+});
+
+function openAddScheduleModal(presetTitle) {
+  const now = new Date();
+  const dateStr = now.toISOString().split('T')[0];
+  const timeStr = formatTime(now);
+  openModal(`
+    <h3>添加日程</h3>
+    <input class="modal-input" id="modalScheduleTitle" placeholder="日程内容（自动识别日期时间）" value="${escapeHTML(presetTitle || '')}">
+    <div style="display:flex;gap:10px;">
+      <input class="modal-input" type="date" id="modalScheduleDate" value="${dateStr}" style="flex:1;">
+      <input class="modal-input" type="time" id="modalScheduleTime" value="${timeStr}" style="flex:1;">
+    </div>
+    <div style="font-size:11px;color:var(--text-tertiary);margin-top:-4px;min-height:14px;" id="modalDateHint"></div>
+    <div class="modal-actions">
+      <button class="modal-btn secondary" id="modalCancel">取消</button>
+      <button class="modal-btn primary" id="modalConfirm">添加</button>
+    </div>
+  `);
+
+  // Auto-detect date/time from title as user types
+  let autoDetectTimer = null;
+  $('#modalScheduleTitle').addEventListener('input', function() {
+    clearTimeout(autoDetectTimer);
+    autoDetectTimer = setTimeout(() => {
+      const text = this.value.trim();
+      if (!text) {
+        $('#modalDateHint').textContent = '';
+        return;
+      }
+      const parsedDate = parseDateFromText(text);
+      const parsedTime = parseTimeFromText(text);
+      // Only auto-update if something was actually detected
+      const hasDate = parsedDate !== dateStr;
+      const hasTime = parsedTime !== '' && parsedTime !== timeStr;
+      if (hasDate || hasTime) {
+        if (hasDate) $('#modalScheduleDate').value = parsedDate;
+        if (hasTime) $('#modalScheduleTime').value = parsedTime;
+        const parts = [];
+        if (hasDate) parts.push('日期→' + parsedDate);
+        if (hasTime) parts.push('时间→' + parsedTime);
+        $('#modalDateHint').textContent = '已自动识别：' + parts.join('，');
+        $('#modalDateHint').style.color = 'var(--accent)';
+      } else {
+        $('#modalDateHint').textContent = '未检测到日期时间，将使用当前时间';
+        $('#modalDateHint').style.color = 'var(--text-tertiary)';
+      }
+    }, 600);
+  });
+
+  // If presetTitle is provided, trigger detection immediately
+  if (presetTitle) {
+    setTimeout(() => {
+      const parsedDate = parseDateFromText(presetTitle);
+      const parsedTime = parseTimeFromText(presetTitle);
+      if (parsedDate !== dateStr) $('#modalScheduleDate').value = parsedDate;
+      if (parsedTime) $('#modalScheduleTime').value = parsedTime;
+      const parts = [];
+      if (parsedDate !== dateStr) parts.push('日期→' + parsedDate);
+      if (parsedTime) parts.push('时间→' + parsedTime);
+      if (parts.length) {
+        $('#modalDateHint').textContent = '已自动识别：' + parts.join('，');
+        $('#modalDateHint').style.color = 'var(--accent)';
+      }
+    }, 100);
+  }
+
+  $('#modalCancel').addEventListener('click', closeModal);
+  $('#modalConfirm').addEventListener('click', function() {
+    const title = $('#modalScheduleTitle').value.trim();
+    if (!title) { showToast('请输入日程内容'); return; }
+    // Final parse to catch anything missed
+    const finalDate = $('#modalScheduleDate').value;
+    const finalTime = $('#modalScheduleTime').value;
+    data.schedules.unshift({
+      id: uid(),
+      title,
+      date: finalDate,
+      time: finalTime
+    });
+    saveData(data);
+    closeModal();
+    renderSchedule();
+    showToast('已添加日程');
+  });
+}
+
+$('#scheduleAddBtn').addEventListener('click', () => openAddScheduleModal(''));
+
+// ============================================================
+// SOP PAGE
+// ============================================================
+function renderSOP() {
+  renderDailySOP();
+  renderEventSOP();
+}
+
+// ── Daily SOP ──
+function renderDailySOP() {
+  const container = $('#sopDailyContent');
+
+  if (data.dailySOPs.length === 0) {
+    container.innerHTML = `<div class="empty-state"><span class="empty-icon">📋</span>还没有日常 SOP<br>点击下方按钮添加分类</div>
+      <button class="sop-add-category-btn" id="addDailyCatBtn">+ 新建分类</button>`;
+    bindAddDailyCat();
+    return;
+  }
+
+  container.innerHTML = data.dailySOPs.map(cat => {
+    const checkedCount = cat.items.filter(i => i.checked).length;
+    const totalCount = cat.items.length;
+    return `
+    <div class="sop-group" data-cat-id="${cat.id}">
+      <div class="sop-group-header">
+        <span class="folder-icon">▶</span>
+        <span class="folder-name">${escapeHTML(cat.name)}</span>
+        <span class="folder-count">${checkedCount}/${totalCount}</span>
+        <button class="sop-item-delete" data-delete-cat="${cat.id}">删除</button>
+      </div>
+      <div class="sop-group-body">
+        <div class="sop-group-items">
+          ${cat.items.length === 0
+            ? `<div style="font-size:13px;color:var(--text-tertiary);padding:8px 0;text-align:center;">暂无条目</div>`
+            : cat.items.map(item => `
+            <div class="sop-check-item" data-item-id="${item.id}">
+              <input type="checkbox" ${item.checked ? 'checked' : ''}>
+              <span class="item-text ${item.checked ? 'checked' : ''}">${escapeHTML(item.text)}</span>
+              <button class="sop-item-delete" data-delete-item="${item.id}">×</button>
+            </div>
+          `).join('')}
+        </div>
+        <button class="sop-add-btn" data-add-to="${cat.id}">+ 添加条目</button>
+      </div>
+    </div>
+  `}).join('') + `<button class="sop-add-category-btn" id="addDailyCatBtn">+ 新建分类</button>`;
+
+  bindDailySOPEvents();
+}
+
+function bindDailySOPEvents() {
+  // Toggle folder open/close
+  $$('#sopDailyContent .sop-group-header').forEach(header => {
+    header.addEventListener('click', function(e) {
+      // Don't toggle if clicking delete button
+      if (e.target.closest('[data-delete-cat]')) return;
+      const group = this.closest('.sop-group');
+      group.classList.toggle('open');
+    });
+  });
+
+  // Checkbox toggle
+  $$('#sopDailyContent input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', function() {
+      const itemDiv = this.closest('.sop-check-item');
+      const itemId = itemDiv.dataset.itemId;
+      const textEl = itemDiv.querySelector('.item-text');
+
+      for (const cat of data.dailySOPs) {
+        const item = cat.items.find(i => i.id === itemId);
+        if (item) {
+          item.checked = this.checked;
+          if (this.checked) textEl.classList.add('checked');
+          else textEl.classList.remove('checked');
+          break;
+        }
+      }
+      saveData(data);
+    });
+  });
+
+  // Delete item
+  $$('#sopDailyContent [data-delete-item]').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const itemId = this.dataset.deleteItem;
+      for (const cat of data.dailySOPs) {
+        cat.items = cat.items.filter(i => i.id !== itemId);
+      }
+      saveData(data);
+      renderDailySOP();
+    });
+  });
+
+  // Delete category
+  $$('#sopDailyContent [data-delete-cat]').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      if (!confirm('确定删除这个分类及其所有条目吗？')) return;
+      const catId = this.dataset.deleteCat;
+      data.dailySOPs = data.dailySOPs.filter(c => c.id !== catId);
+      saveData(data);
+      renderDailySOP();
+      showToast('分类已删除');
+    });
+  });
+
+  // Add item button
+  $$('#sopDailyContent [data-add-to]').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const catId = this.dataset.addTo;
+      openAddDailyItemToCatModal(catId);
+    });
+  });
+
+  bindAddDailyCat();
+}
+
+function bindAddDailyCat() {
+  const btn = $('#addDailyCatBtn');
+  if (!btn) return;
+  btn.addEventListener('click', function() {
+    openModal(`
+      <h3>新建日常 SOP 分类</h3>
+      <input class="modal-input" id="modalCatName" placeholder="分类名称，如：出门必备">
+      <div class="modal-actions">
+        <button class="modal-btn secondary" id="modalCancel">取消</button>
+        <button class="modal-btn primary" id="modalConfirm">创建</button>
+      </div>
+    `);
+    $('#modalCancel').addEventListener('click', closeModal);
+    $('#modalConfirm').addEventListener('click', function() {
+      const name = $('#modalCatName').value.trim();
+      if (!name) { showToast('请输入分类名称'); return; }
+      data.dailySOPs.push({ id: uid(), name, items: [] });
+      saveData(data);
+      closeModal();
+      renderDailySOP();
+      showToast('分类已创建');
+    });
+  });
+}
+
+function openAddDailyItemToCatModal(catId) {
+  const cat = data.dailySOPs.find(c => c.id === catId);
+  if (!cat) return;
+  openModal(`
+    <h3>添加条目到「${escapeHTML(cat.name)}」</h3>
+    <input class="modal-input" id="modalItemText" placeholder="条目内容">
+    <div class="modal-actions">
+      <button class="modal-btn secondary" id="modalCancel">取消</button>
+      <button class="modal-btn primary" id="modalConfirm">添加</button>
+    </div>
+  `);
+  $('#modalCancel').addEventListener('click', closeModal);
+  $('#modalConfirm').addEventListener('click', function() {
+    const text = $('#modalItemText').value.trim();
+    if (!text) { showToast('请输入内容'); return; }
+    cat.items.push({ id: uid(), text, checked: false });
+    saveData(data);
+    closeModal();
+    renderDailySOP();
+    showToast('条目已添加');
+  });
+}
+
+function openAddDailyItemModal(presetText) {
+  if (data.dailySOPs.length === 0) {
+    showToast('请先创建分类');
+    return;
+  }
+  const options = data.dailySOPs.map(c => `<option value="${c.id}">${escapeHTML(c.name)}</option>`).join('');
+  openModal(`
+    <h3>添加每日 SOP 条目</h3>
+    <select class="modal-select" id="modalItemCat">${options}</select>
+    <input class="modal-input" id="modalItemText" placeholder="条目内容" value="${escapeHTML(presetText || '')}">
+    <div class="modal-actions">
+      <button class="modal-btn secondary" id="modalCancel">取消</button>
+      <button class="modal-btn primary" id="modalConfirm">添加</button>
+    </div>
+  `);
+  $('#modalCancel').addEventListener('click', closeModal);
+  $('#modalConfirm').addEventListener('click', function() {
+    const catId = $('#modalItemCat').value;
+    const text = $('#modalItemText').value.trim();
+    if (!text) { showToast('请输入内容'); return; }
+    const cat = data.dailySOPs.find(c => c.id === catId);
+    if (cat) {
+      cat.items.push({ id: uid(), text, checked: false });
+      saveData(data);
+    }
+    closeModal();
+    renderDailySOP();
+    showToast('条目已添加');
+  });
+}
+
+// ── Event SOP ──
+function renderEventSOP() {
+  const container = $('#sopEventContent');
+
+  if (data.eventSOPs.length === 0) {
+    container.innerHTML = `<div class="empty-state"><span class="empty-icon">🔁</span>还没有事件 SOP<br>完成一个项目后，来这里记录流程</div>
+      <button class="sop-add-category-btn" id="addEventSopBtn">+ 新建事件 SOP</button>`;
+    bindAddEventSOP();
+    return;
+  }
+
+  container.innerHTML = data.eventSOPs.map(esop => `
+    <div class="event-sop-card">
+      <div class="event-sop-header">
+        <span class="event-sop-title">${escapeHTML(esop.title)}</span>
+        <button class="event-sop-delete" data-delete-esop="${esop.id}">×</button>
+      </div>
+      <div class="event-sop-steps">
+        ${esop.steps.map((step, i) => `
+          <div class="event-step">
+            <div class="event-step-num">${i + 1}</div>
+            <div class="event-step-text">${escapeHTML(step.text)}</div>
+          </div>
+          ${i < esop.steps.length - 1 ? `<div class="event-step-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg></div>` : ''}
+        `).join('')}
+      </div>
+      <button class="event-step-add" data-add-step="${esop.id}">+ 添加步骤</button>
+    </div>
+  `).join('') + `<button class="sop-add-category-btn" id="addEventSopBtn">+ 新建事件 SOP</button>`;
+
+  bindEventSOPEvents();
+}
+
+function bindEventSOPEvents() {
+  $$('#sopEventContent [data-delete-esop]').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      if (!confirm('确定删除这个事件 SOP 吗？')) return;
+      const id = this.dataset.deleteEsop;
+      data.eventSOPs = data.eventSOPs.filter(e => e.id !== id);
+      saveData(data);
+      renderEventSOP();
+      showToast('已删除');
+    });
+  });
+
+  $$('#sopEventContent [data-add-step]').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const esopId = this.dataset.addStep;
+      const esop = data.eventSOPs.find(e => e.id === esopId);
+      if (!esop) return;
+      openModal(`
+        <h3>添加步骤到「${escapeHTML(esop.title)}」</h3>
+        <input class="modal-input" id="modalStepText" placeholder="步骤内容">
+        <div class="modal-actions">
+          <button class="modal-btn secondary" id="modalCancel">取消</button>
+          <button class="modal-btn primary" id="modalConfirm">添加</button>
+        </div>
+      `);
+      $('#modalCancel').addEventListener('click', closeModal);
+      $('#modalConfirm').addEventListener('click', function() {
+        const text = $('#modalStepText').value.trim();
+        if (!text) { showToast('请输入步骤内容'); return; }
+        esop.steps.push({ id: uid(), text });
+        saveData(data);
+        closeModal();
+        renderEventSOP();
+        showToast('步骤已添加');
+      });
+    });
+  });
+
+  bindAddEventSOP();
+}
+
+function bindAddEventSOP() {
+  const btn = $('#addEventSopBtn');
+  if (!btn) return;
+  btn.addEventListener('click', function() {
+    openModal(`
+      <h3>新建事件 SOP</h3>
+      <input class="modal-input" id="modalEsopTitle" placeholder="事件名称，如：项目上线流程">
+      <textarea class="modal-textarea" id="modalEsopSteps" placeholder="步骤（每行一个步骤）"></textarea>
+      <div class="modal-actions">
+        <button class="modal-btn secondary" id="modalCancel">取消</button>
+        <button class="modal-btn primary" id="modalConfirm">创建</button>
+      </div>
+    `);
+    $('#modalCancel').addEventListener('click', closeModal);
+    $('#modalConfirm').addEventListener('click', function() {
+      const title = $('#modalEsopTitle').value.trim();
+      const stepsText = $('#modalEsopSteps').value.trim();
+      if (!title) { showToast('请输入事件名称'); return; }
+      const steps = stepsText ? stepsText.split('\n').filter(s => s.trim()).map(s => ({ id: uid(), text: s.trim() })) : [];
+      data.eventSOPs.unshift({ id: uid(), title, steps });
+      saveData(data);
+      closeModal();
+      renderEventSOP();
+      showToast('事件 SOP 已创建');
+    });
+  });
+}
+
+$('#sopTabs').addEventListener('click', function(e) {
+  const tab = e.target.closest('.sop-cat-tab');
+  if (!tab) return;
+  sopTab = tab.dataset.tab;
+  $$('#sopTabs .sop-cat-tab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  if (sopTab === 'daily') {
+    $('#sopDailyContent').style.display = '';
+    $('#sopEventContent').style.display = 'none';
+    renderDailySOP();
+  } else {
+    $('#sopDailyContent').style.display = 'none';
+    $('#sopEventContent').style.display = '';
+    renderEventSOP();
+  }
+});
+
+// ============================================================
+// INSPIRATION PAGE
+// ============================================================
+function renderInspirations() {
+  const grid = $('#inspirationGrid');
+
+  if (data.inspirations.length === 0) {
+    grid.innerHTML = `<div class="empty-state"><span class="empty-icon">💡</span>还没有灵感<br>点击右上角 + 或使用语音记录</div>`;
+    return;
+  }
+
+  grid.innerHTML = data.inspirations.map(insp => {
+    const d = new Date(insp.date);
+    const timeAgo = getTimeAgo(d);
+    return `
+      <div class="inspiration-card">
+        <div class="inspiration-text">${escapeHTML(insp.text)}</div>
+        <div class="inspiration-meta">
+          <span>${timeAgo}</span>
+          <button class="inspiration-delete" data-id="${insp.id}">×</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  grid.querySelectorAll('.inspiration-delete').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const id = this.dataset.id;
+      data.inspirations = data.inspirations.filter(i => i.id !== id);
+      saveData(data);
+      renderInspirations();
+      showToast('已删除');
+    });
+  });
+}
+
+function getTimeAgo(d) {
+  const now = new Date();
+  const diff = now - d;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return '刚刚';
+  if (mins < 60) return `${mins} 分钟前`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} 小时前`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days} 天前`;
+  return `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}`;
+}
+
+function openAddInspirationModal(presetText) {
+  openModal(`
+    <h3>记录灵感</h3>
+    <textarea class="modal-textarea" id="modalInspiration" placeholder="写下你的灵感...">${escapeHTML(presetText || '')}</textarea>
+    <div class="modal-actions">
+      <button class="modal-btn secondary" id="modalCancel">取消</button>
+      <button class="modal-btn primary" id="modalConfirm">保存</button>
+    </div>
+  `);
+  $('#modalCancel').addEventListener('click', closeModal);
+  $('#modalConfirm').addEventListener('click', function() {
+    const text = $('#modalInspiration').value.trim();
+    if (!text) { showToast('请输入内容'); return; }
+    data.inspirations.unshift({ id: uid(), text, date: new Date().toISOString() });
+    saveData(data);
+    closeModal();
+    renderInspirations();
+    showToast('灵感已保存');
+  });
+}
+
+$('#inspirationAddBtn').addEventListener('click', () => openAddInspirationModal(''));
+
+// ============================================================
+// MY PAGE
+// ============================================================
+function renderMy() {
+  // Avatar
+  if (data.profile.avatar) {
+    $('#avatarDisplay').innerHTML = `<img src="${data.profile.avatar}" alt="avatar">`;
+  } else {
+    $('#avatarDisplay').textContent = '👤';
+  }
+
+  // Nickname
+  $('#nicknameInput').value = data.profile.nickname;
+
+  // Stats
+  $('#statSchedules').textContent = data.schedules.length;
+  const totalDailyItems = data.dailySOPs.reduce((sum, c) => sum + c.items.length, 0);
+  $('#statSops').textContent = data.eventSOPs.length + totalDailyItems;
+  $('#statInspirations').textContent = data.inspirations.length;
+}
+
+$('#avatarWrap').addEventListener('click', () => $('#avatarInput').click());
+$('#avatarInput').addEventListener('change', function() {
+  const file = this.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    data.profile.avatar = e.target.result;
+    saveData(data);
+    renderMy();
+  };
+  reader.readAsDataURL(file);
+});
+
+$('#nicknameEditBtn').addEventListener('click', function() {
+  const input = $('#nicknameInput');
+  input.focus();
+  input.select();
+});
+
+$('#nicknameInput').addEventListener('blur', function() {
+  const val = this.value.trim();
+  if (val && val !== data.profile.nickname) {
+    data.profile.nickname = val;
+    saveData(data);
+    showToast('昵称已更新');
+  }
+});
+
+$('#nicknameInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') this.blur();
+});
+
+// Export
+$('#exportDataBtn').addEventListener('click', function() {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `SnapMemo_备份_${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('数据已导出');
+});
+
+// Import
+$('#importDataBtn').addEventListener('click', () => $('#importInput').click());
+$('#importInput').addEventListener('change', function() {
+  const file = this.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const imported = JSON.parse(e.target.result);
+      if (imported.profile && imported.schedules && imported.dailySOPs && imported.eventSOPs && imported.inspirations) {
+        data = imported;
+        saveData(data);
+        renderMy();
+        showToast('数据导入成功');
+      } else {
+        showToast('数据格式不正确');
+      }
+    } catch(err) {
+      showToast('文件解析失败');
+    }
+  };
+  reader.readAsText(file);
+  this.value = '';
+});
+
+// Clear all
+$('#clearDataBtn').addEventListener('click', function() {
+  if (confirm('确定要清除全部数据吗？此操作不可恢复！')) {
+    if (confirm('再次确认：清除所有日程、SOP、灵感和个人数据？')) {
+      data = getDefaultData();
+      saveData(data);
+      renderMy();
+      showToast('数据已清除');
+    }
+  }
+});
+
+// ============================================================
+// UTILS
+// ============================================================
+function escapeHTML(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// ============================================================
+// INIT
+// ============================================================
+function init() {
+  // Detect voice support on load — if unsupported, show text input by default
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    $('#textInputWrap').classList.remove('hidden');
+    $('#voiceLabel').textContent = '打字输入';
+  }
+  navigateTo('home');
+}
+
+init();
+</script>
+</body>
+</html>
