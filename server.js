@@ -85,7 +85,7 @@ db.exec(`
     id TEXT PRIMARY KEY,
     user_id INTEGER NOT NULL,
     text TEXT NOT NULL,
-    date TEXT NOT NULL,
+    date TEXT DEFAULT '',
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 `);
@@ -99,8 +99,13 @@ function authMiddleware(req, res, next) {
   const token = authHeader.split(' ')[1];
   try {
     const payload = jwt.verify(token, JWT_SECRET);
+    // Verify user still exists in database (in case db was reset)
+    const user = db.prepare('SELECT id FROM users WHERE id = ?').get(payload.userId);
+    if (!user) {
+      return res.status(401).json({ error: '用户不存在，请重新注册' });
+    }
     req.userId = payload.userId;
-    req.phone = payload.phone;
+    req.phone = payload.phone || payload.username;
     next();
   } catch (err) {
     return res.status(401).json({ error: '登录已过期，请重新登录' });
@@ -270,7 +275,8 @@ app.put('/api/data', authMiddleware, (req, res) => {
   const userId = req.userId;
   const { profile, schedules, dailySOPs, eventSOPs, inspirations } = req.body;
 
-  const syncAll = db.transaction(() => {
+  try {
+    const syncAll = db.transaction(() => {
     // Update profile
     if (profile) {
       db.prepare('UPDATE users SET nickname = ?, avatar = ? WHERE id = ?')
@@ -283,7 +289,10 @@ app.put('/api/data', authMiddleware, (req, res) => {
       const insertSched = db.prepare(
         'INSERT INTO schedules (id, user_id, title, date, time) VALUES (?, ?, ?, ?, ?)'
       );
-      schedules.forEach(s => insertSched.run(s.id, userId, s.title, s.date, s.time || ''));
+      schedules.forEach((s, i) => {
+        const sid = s.id || (Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + i);
+        insertSched.run(sid, userId, s.title || '', s.date || '', s.time || '');
+      });
     }
 
     // Replace daily SOPs
@@ -298,10 +307,12 @@ app.put('/api/data', authMiddleware, (req, res) => {
         'INSERT INTO daily_sop_items (id, category_id, text, checked, sort_order) VALUES (?, ?, ?, ?, ?)'
       );
       dailySOPs.forEach((cat, ci) => {
-        insertCat.run(cat.id, userId, cat.name, ci);
+        const cid = cat.id || (Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + 'c' + ci);
+        insertCat.run(cid, userId, cat.name || '', ci);
         if (Array.isArray(cat.items)) {
           cat.items.forEach((item, ii) => {
-            insertItem.run(item.id, cat.id, item.text, item.checked ? 1 : 0, ii);
+            const iid = item.id || (Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + 'i' + ii);
+            insertItem.run(iid, cid, item.text || '', item.checked ? 1 : 0, ii);
           });
         }
       });
@@ -318,11 +329,13 @@ app.put('/api/data', authMiddleware, (req, res) => {
       const insertStep = db.prepare(
         'INSERT INTO event_sop_steps (id, event_sop_id, text, sort_order) VALUES (?, ?, ?, ?)'
       );
-      eventSOPs.forEach(esop => {
-        insertEvent.run(esop.id, userId, esop.title);
+      eventSOPs.forEach((esop, ei) => {
+        const eid = esop.id || (Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + 'e' + ei);
+        insertEvent.run(eid, userId, esop.title || '');
         if (Array.isArray(esop.steps)) {
           esop.steps.forEach((step, si) => {
-            insertStep.run(step.id, esop.id, step.text, si);
+            const sid = step.id || (Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + 's' + si);
+            insertStep.run(sid, eid, step.text || '', si);
           });
         }
       });
@@ -334,7 +347,10 @@ app.put('/api/data', authMiddleware, (req, res) => {
       const insertInsp = db.prepare(
         'INSERT INTO inspirations (id, user_id, text, date) VALUES (?, ?, ?, ?)'
       );
-      inspirations.forEach(insp => insertInsp.run(insp.id, userId, insp.text, insp.date));
+      inspirations.forEach((insp, i) => {
+        const iid = insp.id || (Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + 'n' + i);
+        insertInsp.run(iid, userId, insp.text || '', insp.date || '');
+      });
     }
   });
 
@@ -379,13 +395,14 @@ function createDefaultData(userId) {
   const insertEvent = db.prepare('INSERT INTO event_sops (id, user_id, title) VALUES (?, ?, ?)');
   const insertStep = db.prepare('INSERT INTO event_sop_steps (id, event_sop_id, text, sort_order) VALUES (?, ?, ?, ?)');
 
-  cats.forEach((cat, ci) => {
-    insertCat.run(cat.id, userId, cat.name, ci);
-    cat.items.forEach((item, ii) => insertItem.run(item.id, cat.id, item.text, ii));
-  });
-
-  insertEvent.run(eventSOP.id, userId, eventSOP.title);
-  eventSOP.steps.forEach((step, si) => insertStep.run(step.id, eventSOP.id, step.text, si));
+  db.transaction(() => {
+    cats.forEach((cat, ci) => {
+      insertCat.run(cat.id, userId, cat.name, ci);
+      cat.items.forEach((item, ii) => insertItem.run(item.id, cat.id, item.text, ii));
+    });
+    insertEvent.run(eventSOP.id, userId, eventSOP.title);
+    eventSOP.steps.forEach((step, si) => insertStep.run(step.id, eventSOP.id, step.text, si));
+  })();
 }
 
 // ── Serve Frontend ──
