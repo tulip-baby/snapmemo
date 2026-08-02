@@ -20,11 +20,20 @@ const db = new Database(path.join(__dirname, 'snapmemo.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
+// Migrate: check if old 'username' column exists, rename to 'phone'
+const colInfo = db.prepare("PRAGMA table_info(users)").all();
+const hasUsername = colInfo.some(c => c.name === 'username');
+const hasPhone = colInfo.some(c => c.name === 'phone');
+if (hasUsername && !hasPhone) {
+  db.exec('ALTER TABLE users RENAME COLUMN username TO phone');
+  console.log('数据库已迁移: username → phone');
+}
+
 // Create tables
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
+    phone TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     nickname TEXT DEFAULT '',
     avatar TEXT DEFAULT '',
@@ -91,7 +100,7 @@ function authMiddleware(req, res, next) {
   try {
     const payload = jwt.verify(token, JWT_SECRET);
     req.userId = payload.userId;
-    req.username = payload.username;
+    req.phone = payload.phone;
     next();
   } catch (err) {
     return res.status(401).json({ error: '登录已过期，请重新登录' });
@@ -102,65 +111,66 @@ function authMiddleware(req, res, next) {
 
 // Register
 app.post('/api/register', (req, res) => {
-  const { username, password } = req.body;
+  const { phone, password } = req.body;
 
-  if (!username || !password) {
-    return res.status(400).json({ error: '用户名和密码不能为空' });
+  if (!phone || !password) {
+    return res.status(400).json({ error: '手机号和密码不能为空' });
   }
-  if (username.length < 2 || username.length > 30) {
-    return res.status(400).json({ error: '用户名需要 2-30 个字符' });
+  // 验证手机号格式：11位数字，以1开头
+  if (!/^1\d{10}$/.test(phone)) {
+    return res.status(400).json({ error: '请输入正确的11位手机号' });
   }
   if (password.length < 4 || password.length > 100) {
     return res.status(400).json({ error: '密码需要 4-100 个字符' });
   }
 
-  const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  const existing = db.prepare('SELECT id FROM users WHERE phone = ?').get(phone);
   if (existing) {
-    return res.status(409).json({ error: '该用户名已被注册' });
+    return res.status(409).json({ error: '该手机号已被注册' });
   }
 
   const passwordHash = bcrypt.hashSync(password, 10);
   const result = db.prepare(
-    'INSERT INTO users (username, password_hash, nickname) VALUES (?, ?, ?)'
-  ).run(username, passwordHash, username);
+    'INSERT INTO users (phone, password_hash, nickname) VALUES (?, ?, ?)'
+  ).run(phone, passwordHash, phone);
 
   // Create default data for new user
   const userId = result.lastInsertRowid;
   createDefaultData(userId);
 
-  const token = jwt.sign({ userId, username }, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
+  const token = jwt.sign({ userId, phone }, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
 
   res.json({
     token,
-    user: { id: userId, username, nickname: username, avatar: '' }
+    user: { id: userId, phone, nickname: phone, avatar: '' }
   });
 });
 
 // Login
 app.post('/api/login', (req, res) => {
-  const { username, password } = req.body;
+  const { phone, password } = req.body;
 
-  if (!username || !password) {
-    return res.status(400).json({ error: '请输入用户名和密码' });
+  if (!phone || !password) {
+    return res.status(400).json({ error: '请输入手机号和密码' });
   }
 
-  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+  const user = db.prepare('SELECT * FROM users WHERE phone = ?').get(phone);
   if (!user) {
-    return res.status(401).json({ error: '用户名或密码错误' });
+    return res.status(401).json({ error: '手机号或密码错误' });
   }
 
   if (!bcrypt.compareSync(password, user.password_hash)) {
-    return res.status(401).json({ error: '用户名或密码错误' });
+    return res.status(401).json({ error: '手机号或密码错误' });
   }
 
-  const token = jwt.sign({ userId: user.id, username: user.username }, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
+  const token = jwt.sign({ userId: user.id, phone: user.phone }, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
 
   res.json({
     token,
     user: {
       id: user.id,
-      username: user.username,
-      nickname: user.nickname || user.username,
+      phone: user.phone,
+      nickname: user.nickname || user.phone,
       avatar: user.avatar || ''
     }
   });
@@ -169,7 +179,7 @@ app.post('/api/login', (req, res) => {
 // ── Profile Routes ──
 
 app.get('/api/me', authMiddleware, (req, res) => {
-  const user = db.prepare('SELECT id, username, nickname, avatar, created_at FROM users WHERE id = ?').get(req.userId);
+  const user = db.prepare('SELECT id, phone, nickname, avatar, created_at FROM users WHERE id = ?').get(req.userId);
   if (!user) return res.status(404).json({ error: '用户不存在' });
   res.json({ user });
 });

@@ -1067,7 +1067,7 @@
     <button class="auth-tab" data-tab="register">注册</button>
   </div>
   <form class="auth-form" id="authForm" autocomplete="off">
-    <input class="auth-input" type="text" id="authUsername" placeholder="用户名" maxlength="30" autocomplete="username">
+    <input class="auth-input" type="tel" id="authPhone" placeholder="手机号" maxlength="11" autocomplete="tel">
     <input class="auth-input" type="password" id="authPassword" placeholder="密码" maxlength="100" autocomplete="current-password">
     <div class="auth-error" id="authError"></div>
     <button class="auth-submit" type="submit" id="authSubmitBtn">登 录</button>
@@ -2678,7 +2678,7 @@ function renderMy() {
 
   // Account label
   if (currentUser) {
-    $('#accountLabel').textContent = '账号：' + currentUser.username;
+    $('#accountLabel').textContent = '手机号：' + currentUser.phone;
   }
 
   // Stats
@@ -2790,13 +2790,17 @@ $('#authTabs').addEventListener('click', function(e) {
 
 $('#authForm').addEventListener('submit', async function(e) {
   e.preventDefault();
-  const username = $('#authUsername').value.trim();
+  const phone = $('#authPhone').value.trim();
   const password = $('#authPassword').value.trim();
   const btn = $('#authSubmitBtn');
   const errEl = $('#authError');
 
-  if (!username || !password) {
-    errEl.textContent = '请填写用户名和密码';
+  if (!phone || !password) {
+    errEl.textContent = '请填写手机号和密码';
+    return;
+  }
+  if (!/^1\d{10}$/.test(phone)) {
+    errEl.textContent = '请输入正确的11位手机号';
     return;
   }
 
@@ -2808,7 +2812,7 @@ $('#authForm').addEventListener('submit', async function(e) {
     const endpoint = authMode === 'login' ? '/login' : '/register';
     const result = await apiFetch(endpoint, {
       method: 'POST',
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify({ phone, password })
     });
 
     setToken(result.token);
@@ -2818,8 +2822,8 @@ $('#authForm').addEventListener('submit', async function(e) {
     const loaded = await loadDataFromServer();
 
     // Update profile from user info
-    if (loaded && data.profile.nickname === '未命名用户' || !data.profile.nickname) {
-      data.profile.nickname = currentUser.nickname || username;
+    if (loaded && (data.profile.nickname === '未命名用户' || !data.profile.nickname)) {
+      data.profile.nickname = currentUser.nickname || phone;
     }
 
     // Show app
@@ -2844,7 +2848,7 @@ $('#logoutBtn').addEventListener('click', function() {
   $$('.page').forEach(p => { p.classList.remove('active'); });
   $('#page-home').classList.add('active');
   currentPage = 'home';
-  $('#authUsername').value = '';
+  $('#authPhone').value = '';
   $('#authPassword').value = '';
   $('#authError').textContent = '';
   showToast('已退出登录');
