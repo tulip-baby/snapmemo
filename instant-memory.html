@@ -1024,6 +1024,26 @@
     padding-top: 8px;
   }
 
+  .profile-setup-wrap {
+    max-width: 280px;
+    margin: 0 auto;
+  }
+
+  .setup-skip {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    background: none;
+    border: none;
+    color: var(--text-tertiary);
+    font-size: 14px;
+    cursor: pointer;
+    margin-top: 8px;
+    border-radius: var(--radius-sm);
+    transition: var(--transition);
+  }
+  .setup-skip:hover { color: var(--text-secondary); background: var(--accent-light); }
+
   /* Loading spinner on auth */
   .auth-loading {
     display: inline-block;
@@ -1073,6 +1093,22 @@
     <button class="auth-submit" type="submit" id="authSubmitBtn">登 录</button>
   </form>
   <div class="auth-hint">数据云端保存，换设备也能访问</div>
+</div>
+
+<!-- ====== PROFILE SETUP SCREEN (注册后第二步) ====== -->
+<div class="auth-overlay hidden" id="profileSetupOverlay">
+  <div class="auth-brand">完善资料</div>
+  <div class="profile-setup-wrap">
+    <div class="avatar-setup" id="setupAvatarDisplay" style="width:80px;height:80px;border-radius:50%;background:var(--accent-light);display:flex;align-items:center;justify-content:center;font-size:36px;margin:0 auto 12px;cursor:pointer;position:relative;overflow:hidden;">
+      👤
+      <input type="file" accept="image/*" id="setupAvatarInput" style="position:absolute;inset:0;opacity:0;cursor:pointer;">
+    </div>
+    <div style="text-align:center;font-size:12px;color:var(--text-tertiary);margin-bottom:20px;">点击头像上传</div>
+    <input class="auth-input" type="text" id="setupNickname" placeholder="给自己取个名字" maxlength="20" style="margin-bottom:12px;">
+    <div class="auth-error" id="setupError"></div>
+    <button class="auth-submit" type="button" id="setupSubmitBtn">进入 SnapMemo</button>
+    <button class="setup-skip" id="setupSkipBtn">跳过，以后再说</button>
+  </div>
 </div>
 
 <div class="app" id="app">
@@ -2678,7 +2714,7 @@ function renderMy() {
 
   // Account label
   if (currentUser) {
-    $('#accountLabel').textContent = '手机号：' + currentUser.phone;
+    $('#accountLabel').textContent = '账号：' + (currentUser.nickname || currentUser.phone);
   }
 
   // Stats
@@ -2819,17 +2855,24 @@ $('#authForm').addEventListener('submit', async function(e) {
     currentUser = result.user;
 
     // Load data from server
-    const loaded = await loadDataFromServer();
+    await loadDataFromServer();
 
-    // Update profile from user info
-    if (loaded && (data.profile.nickname === '未命名用户' || !data.profile.nickname)) {
-      data.profile.nickname = currentUser.nickname || phone;
+    if (authMode === 'register') {
+      // 注册成功，进入资料完善步骤
+      $('#authOverlay').classList.add('hidden');
+      $('#setupNickname').value = '';
+      setupAvatarData = '';
+      $('#setupAvatarDisplay').innerHTML = '👤<input type="file" accept="image/*" id="setupAvatarInput" style="position:absolute;inset:0;opacity:0;cursor:pointer;">';
+      bindSetupAvatar();
+      $('#profileSetupOverlay').classList.remove('hidden');
+      showToast('注册成功！完善你的个人资料吧');
+    } else {
+      // 登录成功，直接进入
+      data.profile.nickname = currentUser.nickname || currentUser.phone;
+      $('#authOverlay').classList.add('hidden');
+      initApp();
+      showToast('欢迎回来，' + (currentUser.nickname || currentUser.phone));
     }
-
-    // Show app
-    $('#authOverlay').classList.add('hidden');
-    initApp();
-    showToast(authMode === 'register' ? '注册成功！' : '欢迎回来，' + currentUser.nickname);
   } catch (err) {
     errEl.textContent = err.message;
   } finally {
@@ -2852,6 +2895,54 @@ $('#logoutBtn').addEventListener('click', function() {
   $('#authPassword').value = '';
   $('#authError').textContent = '';
   showToast('已退出登录');
+});
+
+// Profile setup: avatar
+let setupAvatarData = '';
+
+function bindSetupAvatar() {
+  const input = document.querySelector('#setupAvatarInput');
+  if (!input) return;
+  input.addEventListener('change', function() {
+    const file = this.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      setupAvatarData = e.target.result;
+      const display = document.querySelector('#setupAvatarDisplay');
+      display.innerHTML = '<img src="' + setupAvatarData + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"><input type="file" accept="image/*" id="setupAvatarInput" style="position:absolute;inset:0;opacity:0;cursor:pointer;">';
+      bindSetupAvatar();
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// Profile setup: submit
+$('#setupSubmitBtn').addEventListener('click', async function() {
+  const nickname = $('#setupNickname').value.trim() || currentUser.phone;
+  try {
+    await apiFetch('/me', {
+      method: 'PUT',
+      body: JSON.stringify({ nickname, avatar: setupAvatarData })
+    });
+    currentUser.nickname = nickname;
+    currentUser.avatar = setupAvatarData;
+    data.profile.nickname = nickname;
+    data.profile.avatar = setupAvatarData;
+    $('#profileSetupOverlay').classList.add('hidden');
+    initApp();
+    showToast('欢迎！' + nickname);
+  } catch (err) {
+    $('#setupError').textContent = err.message;
+  }
+});
+
+// Profile setup: skip
+$('#setupSkipBtn').addEventListener('click', function() {
+  data.profile.nickname = currentUser.phone;
+  $('#profileSetupOverlay').classList.add('hidden');
+  initApp();
+  showToast('欢迎！');
 });
 function escapeHTML(str) {
   const div = document.createElement('div');
