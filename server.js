@@ -33,59 +33,56 @@ function params(count) {
 
 // Initialize tables
 async function initDB() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS users (
+  const queries = [
+    `CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
       phone TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
       nickname TEXT DEFAULT '',
       avatar TEXT DEFAULT '',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS schedules (
+    )`,
+    `CREATE TABLE IF NOT EXISTS schedules (
       id TEXT PRIMARY KEY,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       title TEXT NOT NULL,
       date TEXT NOT NULL,
       time TEXT DEFAULT ''
-    );
-
-    CREATE TABLE IF NOT EXISTS daily_sop_categories (
+    )`,
+    `CREATE TABLE IF NOT EXISTS daily_sop_categories (
       id TEXT PRIMARY KEY,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       sort_order INTEGER DEFAULT 0
-    );
-
-    CREATE TABLE IF NOT EXISTS daily_sop_items (
+    )`,
+    `CREATE TABLE IF NOT EXISTS daily_sop_items (
       id TEXT PRIMARY KEY,
       category_id TEXT NOT NULL REFERENCES daily_sop_categories(id) ON DELETE CASCADE,
       text TEXT NOT NULL,
       checked INTEGER DEFAULT 0,
       sort_order INTEGER DEFAULT 0
-    );
-
-    CREATE TABLE IF NOT EXISTS event_sops (
+    )`,
+    `CREATE TABLE IF NOT EXISTS event_sops (
       id TEXT PRIMARY KEY,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       title TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS event_sop_steps (
+    )`,
+    `CREATE TABLE IF NOT EXISTS event_sop_steps (
       id TEXT PRIMARY KEY,
       event_sop_id TEXT NOT NULL REFERENCES event_sops(id) ON DELETE CASCADE,
       text TEXT NOT NULL,
       sort_order INTEGER DEFAULT 0
-    );
-
-    CREATE TABLE IF NOT EXISTS inspirations (
+    )`,
+    `CREATE TABLE IF NOT EXISTS inspirations (
       id TEXT PRIMARY KEY,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       text TEXT NOT NULL,
       date TEXT DEFAULT ''
-    );
-  `);
+    )`
+  ];
+  for (const q of queries) {
+    await pool.query(q);
+  }
   console.log('PostgreSQL 数据库表已初始化');
 }
 
