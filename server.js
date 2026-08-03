@@ -322,6 +322,39 @@ app.get('/api/data', authMiddleware, asyncHandler(async (req, res) => {
     });
   }
 
+  // Auto-create default event SOPs if user has none (template for new/existing users)
+  if (eventSOPs.length === 0) {
+    await ensureDefaultEventSOPs(userId);
+    // Re-fetch the newly created SOPs
+    const eventResult2 = await pool.query(
+      'SELECT id, title FROM event_sops WHERE user_id = $1 ORDER BY id',
+      [userId]
+    );
+    for (const esop of eventResult2.rows) {
+      const phaseResult2 = await pool.query(
+        'SELECT id, name, sort_order FROM event_sop_phases WHERE event_sop_id = $1 ORDER BY sort_order, id',
+        [esop.id]
+      );
+      const phases2 = [];
+      for (const phase of phaseResult2.rows) {
+        const stepResult2 = await pool.query(
+          'SELECT id, text, details, sort_order FROM event_sop_steps WHERE phase_id = $1 ORDER BY sort_order, id',
+          [phase.id]
+        );
+        phases2.push({
+          id: phase.id,
+          name: phase.name,
+          steps: stepResult2.rows.map(s => ({ id: s.id, text: s.text, details: s.details || '' }))
+        });
+      }
+      eventSOPs.push({
+        id: esop.id,
+        title: esop.title,
+        phases: phases2
+      });
+    }
+  }
+
   const inspResult = await pool.query(
     'SELECT id, text, date FROM inspirations WHERE user_id = $1 ORDER BY date DESC',
     [userId]
@@ -497,18 +530,44 @@ async function createDefaultData(userId) {
   ];
 
   const esopId = uid();
-  const phaseId = uid();
-  const eventSOP = {
-    id: esopId, title: '发布新版本上线流程',
-    phases: [{
-      id: phaseId, name: '默认流程',
-      steps: [
-        { id: uid(), text: '代码审查通过' }, { id: uid(), text: '合并到主分支' },
-        { id: uid(), text: '运行自动化测试' }, { id: uid(), text: '构建生产版本' },
-        { id: uid(), text: '灰度发布 5% 流量' }, { id: uid(), text: '监控指标正常后全量发布' }
-      ]
-    }]
-  };
+  const eventSOPs = [{
+    id: esopId, title: '期末备考 SOP',
+    phases: [
+      {
+        id: uid(), name: '资料整理阶段',
+        steps: [
+          { id: uid(), text: '梳理考试大纲与重点范围', details: '' },
+          { id: uid(), text: '整理课堂笔记与教材要点', details: '' },
+          { id: uid(), text: '收集历年真题与模拟卷', details: '' }
+        ]
+      },
+      {
+        id: uid(), name: '基础复习阶段',
+        steps: [
+          { id: uid(), text: '通读教材，建立知识框架', details: '' },
+          { id: uid(), text: '整理各章节思维导图', details: '' },
+          { id: uid(), text: '重点概念/公式默写自测', details: '' }
+        ]
+      },
+      {
+        id: uid(), name: '强化记忆阶段',
+        steps: [
+          { id: uid(), text: '论述题背诵（3题一组滚动复习）',
+            details: '1）背诵第1组\n2）背诵第2组\n3）合并复习第1+2组\n4）背诵第3组\n5）合并复习第2+3组，持续循环' }
+        ]
+      },
+      {
+        id: uid(), name: '刷题冲刺阶段',
+        steps: [
+          { id: uid(), text: '选择题训练',
+            details: '1）通读记忆选择题知识点\n2）第一轮刷题，整理错题\n3）背诵错题，再次刷题\n4）筛选二次刷题中新暴露的薄弱题目\n5）新旧错题整合复盘，规避蒙对造成的误判' },
+          { id: uid(), text: '模拟考试（限时完整卷）', details: '' },
+          { id: uid(), text: '分析错题，查漏补缺', details: '' },
+          { id: uid(), text: '考前快速过一遍思维导图', details: '' }
+        ]
+      }
+    ]
+  }];
 
   const client = await pool.connect();
   try {
@@ -529,26 +588,110 @@ async function createDefaultData(userId) {
       }
     }
 
-    await client.query(
-      'INSERT INTO event_sops (id, user_id, title) VALUES ($1, $2, $3)',
-      [esopId, userId, eventSOP.title]
-    );
-    await client.query(
-      'INSERT INTO event_sop_phases (id, event_sop_id, name, sort_order) VALUES ($1, $2, $3, $4)',
-      [phaseId, esopId, '默认流程', 0]
-    );
-    for (let si = 0; si < eventSOP.phases[0].steps.length; si++) {
-      const step = eventSOP.phases[0].steps[si];
+    for (let ei = 0; ei < eventSOPs.length; ei++) {
+      const esop = eventSOPs[ei];
       await client.query(
-        'INSERT INTO event_sop_steps (id, phase_id, text, details, sort_order) VALUES ($1, $2, $3, $4, $5)',
-        [step.id, phaseId, step.text, '', si]
+        'INSERT INTO event_sops (id, user_id, title) VALUES ($1, $2, $3)',
+        [esop.id, userId, esop.title]
       );
+      for (let pi = 0; pi < esop.phases.length; pi++) {
+        const phase = esop.phases[pi];
+        const phId = phase.id;
+        await client.query(
+          'INSERT INTO event_sop_phases (id, event_sop_id, name, sort_order) VALUES ($1, $2, $3, $4)',
+          [phId, esop.id, phase.name, pi]
+        );
+        for (let si = 0; si < phase.steps.length; si++) {
+          const step = phase.steps[si];
+          await client.query(
+            'INSERT INTO event_sop_steps (id, phase_id, text, details, sort_order) VALUES ($1, $2, $3, $4, $5)',
+            [step.id, phId, step.text, step.details || '', si]
+          );
+        }
+      }
     }
 
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('createDefaultData error:', err);
+  } finally {
+    client.release();
+  }
+}
+
+// Only create default event SOPs (when user has none), without touching daily SOPs
+async function ensureDefaultEventSOPs(userId) {
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+
+  const eventSOPs = [{
+    id: uid(), title: '期末备考 SOP',
+    phases: [
+      {
+        id: uid(), name: '资料整理阶段',
+        steps: [
+          { id: uid(), text: '梳理考试大纲与重点范围', details: '' },
+          { id: uid(), text: '整理课堂笔记与教材要点', details: '' },
+          { id: uid(), text: '收集历年真题与模拟卷', details: '' }
+        ]
+      },
+      {
+        id: uid(), name: '基础复习阶段',
+        steps: [
+          { id: uid(), text: '通读教材，建立知识框架', details: '' },
+          { id: uid(), text: '整理各章节思维导图', details: '' },
+          { id: uid(), text: '重点概念/公式默写自测', details: '' }
+        ]
+      },
+      {
+        id: uid(), name: '强化记忆阶段',
+        steps: [
+          { id: uid(), text: '论述题背诵（3题一组滚动复习）',
+            details: '1）背诵第1组\n2）背诵第2组\n3）合并复习第1+2组\n4）背诵第3组\n5）合并复习第2+3组，持续循环' }
+        ]
+      },
+      {
+        id: uid(), name: '刷题冲刺阶段',
+        steps: [
+          { id: uid(), text: '选择题训练',
+            details: '1）通读记忆选择题知识点\n2）第一轮刷题，整理错题\n3）背诵错题，再次刷题\n4）筛选二次刷题中新暴露的薄弱题目\n5）新旧错题整合复盘，规避蒙对造成的误判' },
+          { id: uid(), text: '模拟考试（限时完整卷）', details: '' },
+          { id: uid(), text: '分析错题，查漏补缺', details: '' },
+          { id: uid(), text: '考前快速过一遍思维导图', details: '' }
+        ]
+      }
+    ]
+  }];
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (let ei = 0; ei < eventSOPs.length; ei++) {
+      const esop = eventSOPs[ei];
+      await client.query(
+        'INSERT INTO event_sops (id, user_id, title) VALUES ($1, $2, $3)',
+        [esop.id, userId, esop.title]
+      );
+      for (let pi = 0; pi < esop.phases.length; pi++) {
+        const phase = esop.phases[pi];
+        const phId = phase.id;
+        await client.query(
+          'INSERT INTO event_sop_phases (id, event_sop_id, name, sort_order) VALUES ($1, $2, $3, $4)',
+          [phId, esop.id, phase.name, pi]
+        );
+        for (let si = 0; si < phase.steps.length; si++) {
+          const step = phase.steps[si];
+          await client.query(
+            'INSERT INTO event_sop_steps (id, phase_id, text, details, sort_order) VALUES ($1, $2, $3, $4, $5)',
+            [step.id, phId, step.text, step.details || '', si]
+          );
+        }
+      }
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('ensureDefaultEventSOPs error:', err);
   } finally {
     client.release();
   }
