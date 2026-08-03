@@ -1933,58 +1933,62 @@ function parseTimeFromText(text) {
   // Chinese numeral mapping
   const cnNum = { '零':0,'一':1,'二':2,'两':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9,'十':10,'十一':11,'十二':12 };
   function toDigit(s) { return cnNum[s] !== undefined ? cnNum[s] : parseInt(s); }
+  function parseCnNumber(s) {
+    if (cnNum[s] !== undefined) return cnNum[s];
+    // "X十Y": 三十=30, 二十五=25, 十五=15, 十=10
+    let m = s.match(/^([零一二三四五六七八九])?十([零一二三四五六七八九])?$/);
+    if (m) {
+      let result = m[1] ? cnNum[m[1]] * 10 : 10;
+      if (m[2]) result += cnNum[m[2]];
+      return result;
+    }
+    // "零X": 零五=5, 零八=8
+    m = s.match(/^零([零一二三四五六七八九])$/);
+    if (m) return cnNum[m[1]];
+    return parseInt(s);
+  }
 
   // "HH:MM" or "HH：MM"
   const hm = t.match(/(\d{1,2})[：:](\d{2})/);
   if (hm) return `${String(parseInt(hm[1])).padStart(2,'0')}:${hm[2]}`;
 
   // Chinese "X点" / "X点半" / "X点X分" (e.g. 九点, 十点半, 三点二十分)
-  const ch = t.match(/([零一二两三四五六七八九十]|十一|十二)点(半|([零一二三四五六七八九十]+)分)?/);
+  const ch = t.match(/([零一二两三四五六七八九十]|十一|十二)点(半|([零一二三四五六七八九十]+)分?)?/);
   if (ch) {
     const h = toDigit(ch[1]);
     if (ch[2] === '半') return `${String(h).padStart(2,'0')}:30`;
-    if (ch[3]) return `${String(h).padStart(2,'0')}:${String(toDigit(ch[3])).padStart(2,'0')}`;
+    if (ch[3]) return `${String(h).padStart(2,'0')}:${String(parseCnNumber(ch[3])).padStart(2,'0')}`;
     return `${String(h).padStart(2,'0')}:00`;
   }
 
-  // Digit "X点" / "X点半" / "X点X分"
-  const hp = t.match(/(\d{1,2})点(半|(\d+)分)?/);
+  // Digit "X点" / "X点半" / "X点X分" (分 now optional, e.g. "12点30")
+  const hp = t.match(/(\d{1,2})点(半|(\d+)分?)?/);
   if (hp) {
     if (hp[2] === '半') return `${String(parseInt(hp[1])).padStart(2,'0')}:30`;
     if (hp[3]) return `${String(parseInt(hp[1])).padStart(2,'0')}:${String(parseInt(hp[3])).padStart(2,'0')}`;
     return `${String(parseInt(hp[1])).padStart(2,'0')}:00`;
   }
 
-  // "早上九点" / "下午三点" / "晚上八点" (Chinese numeral with period prefix)
-  const cpm = t.match(/(早上|上午|中午|下午|晚上|傍晚|凌晨)([零一二两三四五六七八九十]|十一|十二)点/);
+  // "早上九点" / "中午十二点三十" (Chinese numeral with period prefix, minutes optional)
+  const cpm = t.match(/(早上|上午|中午|下午|晚上|傍晚|凌晨)([零一二两三四五六七八九十]|十一|十二)点(半|([零一二三四五六七八九十]+)分?)?/);
   if (cpm) {
     let h = toDigit(cpm[2]);
     const period = cpm[1];
     if (/下午|晚上|傍晚/.test(period) && h < 12) h += 12;
     if (/凌晨/.test(period) && h === 12) h = 0;
+    if (cpm[3] === '半') return `${String(h).padStart(2,'0')}:30`;
+    if (cpm[4]) return `${String(h).padStart(2,'0')}:${String(parseCnNumber(cpm[4])).padStart(2,'0')}`;
     return `${String(h).padStart(2,'0')}:00`;
   }
-  const cpmh = t.match(/(早上|上午|中午|下午|晚上|傍晚|凌晨)([零一二两三四五六七八九十]|十一|十二)点半/);
-  if (cpmh) {
-    let h = toDigit(cpmh[2]);
-    const period = cpmh[1];
-    if (/下午|晚上|傍晚/.test(period) && h < 12) h += 12;
-    if (/凌晨/.test(period) && h === 12) h = 0;
-    return `${String(h).padStart(2,'0')}:30`;
-  }
 
-  // "下午X点" / "晚上X点" → adjust to 24h (digit)
-  const pm = t.match(/(下午|晚上|傍晚)(\d{1,2})点/);
+  // "下午X点" / "晚上X点" → adjust to 24h (digit, minutes and 分 both optional)
+  const pm = t.match(/(下午|晚上|傍晚)(\d{1,2})点(半|(\d+)分?)?/);
   if (pm) {
     let h = parseInt(pm[2]);
     if (h < 12) h += 12;
+    if (pm[3] === '半') return `${String(h).padStart(2,'0')}:30`;
+    if (pm[4]) return `${String(h).padStart(2,'0')}:${String(parseInt(pm[4])).padStart(2,'0')}`;
     return `${String(h).padStart(2,'0')}:00`;
-  }
-  const pmh = t.match(/(下午|晚上|傍晚)(\d{1,2})点半/);
-  if (pmh) {
-    let h = parseInt(pmh[2]);
-    if (h < 12) h += 12;
-    return `${String(h).padStart(2,'0')}:30`;
   }
 
   // Generic time-of-day markers (only when no specific hour given)
