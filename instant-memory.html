@@ -1367,6 +1367,15 @@ async function apiFetch(path, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...options.headers };
   if (token) headers['Authorization'] = 'Bearer ' + token;
   const res = await fetch(API_BASE + path, { ...options, headers });
+
+  // 防御：如果服务器返回 HTML（如 404/500 错误页面），先检查 Content-Type
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    const text = await res.text();
+    console.error('Server returned non-JSON:', res.status, text.slice(0, 200));
+    throw new Error(`服务器异常 (${res.status})，请检查服务是否正常运行`);
+  }
+
   const json = await res.json();
   if (!res.ok) {
     if (res.status === 401) {
