@@ -111,6 +111,20 @@ async function initDB() {
     console.log('event_sop_steps migration check:', e.message);
   }
 
+  // Migration: add details column if not exists
+  try {
+    const detailCheck = await pool.query(
+      `SELECT column_name FROM information_schema.columns 
+       WHERE table_name = 'event_sop_steps' AND column_name = 'details'`
+    );
+    if (detailCheck.rows.length === 0) {
+      await pool.query('ALTER TABLE event_sop_steps ADD COLUMN details TEXT DEFAULT \'\'');
+      console.log('event_sop_steps 已添加 details 列');
+    }
+  } catch (e) {
+    console.log('event_sop_steps details migration:', e.message);
+  }
+
   console.log('PostgreSQL 数据库表已初始化');
 }
 
@@ -292,13 +306,13 @@ app.get('/api/data', authMiddleware, asyncHandler(async (req, res) => {
     const phases = [];
     for (const phase of phaseResult.rows) {
       const stepResult = await pool.query(
-        'SELECT id, text, sort_order FROM event_sop_steps WHERE phase_id = $1 ORDER BY sort_order, id',
+        'SELECT id, text, details, sort_order FROM event_sop_steps WHERE phase_id = $1 ORDER BY sort_order, id',
         [phase.id]
       );
       phases.push({
         id: phase.id,
         name: phase.name,
-        steps: stepResult.rows.map(s => ({ id: s.id, text: s.text }))
+        steps: stepResult.rows.map(s => ({ id: s.id, text: s.text, details: s.details || '' }))
       });
     }
     eventSOPs.push({
@@ -412,8 +426,8 @@ app.put('/api/data', authMiddleware, asyncHandler(async (req, res) => {
             const step = esop.steps[si];
             const sid = step.id || (Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + 's' + stepCounter++);
             await client.query(
-              'INSERT INTO event_sop_steps (id, phase_id, text, sort_order) VALUES ($1, $2, $3, $4)',
-              [sid, pid, step.text || '', si]
+              'INSERT INTO event_sop_steps (id, phase_id, text, details, sort_order) VALUES ($1, $2, $3, $4, $5)',
+              [sid, pid, step.text || '', step.details || '', si]
             );
           }
         } else {
@@ -429,8 +443,8 @@ app.put('/api/data', authMiddleware, asyncHandler(async (req, res) => {
                 const step = phase.steps[si];
                 const sid = step.id || (Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + 's' + stepCounter++);
                 await client.query(
-                  'INSERT INTO event_sop_steps (id, phase_id, text, sort_order) VALUES ($1, $2, $3, $4)',
-                  [sid, pid, step.text || '', si]
+                  'INSERT INTO event_sop_steps (id, phase_id, text, details, sort_order) VALUES ($1, $2, $3, $4, $5)',
+                  [sid, pid, step.text || '', step.details || '', si]
                 );
               }
             }
@@ -526,8 +540,8 @@ async function createDefaultData(userId) {
     for (let si = 0; si < eventSOP.phases[0].steps.length; si++) {
       const step = eventSOP.phases[0].steps[si];
       await client.query(
-        'INSERT INTO event_sop_steps (id, phase_id, text, sort_order) VALUES ($1, $2, $3, $4)',
-        [step.id, phaseId, step.text, si]
+        'INSERT INTO event_sop_steps (id, phase_id, text, details, sort_order) VALUES ($1, $2, $3, $4, $5)',
+        [step.id, phaseId, step.text, '', si]
       );
     }
 

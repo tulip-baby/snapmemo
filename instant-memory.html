@@ -676,6 +676,99 @@
   }
   .add-phase-btn:hover { border-color: var(--accent); color: var(--accent); }
 
+  /* ── Event SOP inline tabs (流程 / 详情) ── */
+  .event-sop-view-tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--accent-light);
+    border-radius: var(--radius-sm);
+    padding: 3px;
+    margin-bottom: 14px;
+  }
+  .event-sop-view-tab {
+    flex: 1;
+    padding: 7px 0;
+    border: none;
+    background: transparent;
+    border-radius: 5px;
+    font-size: 13px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-weight: 500;
+    transition: var(--transition);
+  }
+  .event-sop-view-tab.active {
+    background: var(--bg);
+    color: var(--text);
+    box-shadow: var(--shadow);
+  }
+
+  /* ── Event SOP Detail View ── */
+  .event-sop-detail-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .esop-detail-step {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: #fff;
+    overflow: hidden;
+  }
+  .esop-detail-step-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: #f8f8f8;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .esop-detail-step-num {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .esop-detail-step-text {
+    flex: 1;
+    min-width: 0;
+    word-break: break-word;
+  }
+  .esop-detail-step-body {
+    padding: 8px 12px 12px 44px;
+  }
+  .esop-detail-textarea {
+    width: 100%;
+    min-height: 60px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-family: inherit;
+    line-height: 1.7;
+    color: var(--text);
+    background: #fafafa;
+    outline: none;
+    resize: vertical;
+    transition: var(--transition);
+  }
+  .esop-detail-textarea:focus {
+    border-color: var(--accent);
+    background: #fff;
+    box-shadow: 0 0 0 2px rgba(99,102,241,0.08);
+  }
+  .esop-detail-textarea::placeholder {
+    color: var(--text-tertiary);
+    font-size: 12px;
+  }
+
   .sop-add-category-btn {
     width: 100%;
     padding: 12px;
@@ -1510,6 +1603,7 @@ let data = getDefaultData();
 let currentUser = null;
 let collapsedESOPs = new Set(); // 事件 SOP 卡片折叠状态
 let collapsedPhases = new Set(); // 阶段折叠状态
+let esopDetailTabs = {}; // 每个事件 SOP 当前显示的 tab: 'flow' | 'detail'
 
 // Load data from server
 async function loadDataFromServer() {
@@ -2722,7 +2816,16 @@ function renderEventSOP() {
     return;
   }
 
-  container.innerHTML = data.eventSOPs.map(esop => `
+  container.innerHTML = data.eventSOPs.map(esop => {
+    const activeTab = esopDetailTabs[esop.id] || 'flow';
+    const allSteps = [];
+    (esop.phases || []).forEach(phase => {
+      (phase.steps || []).forEach(step => {
+        allSteps.push({ ...step, phaseName: phase.name });
+      });
+    });
+
+    return `
     <div class="event-sop-card${collapsedESOPs.has(esop.id) ? ' collapsed' : ''}" data-esop-card="${esop.id}">
       <div class="event-sop-header">
         <div class="event-sop-title-group">
@@ -2733,32 +2836,56 @@ function renderEventSOP() {
         <button class="event-sop-delete" data-delete-esop="${esop.id}" title="删除">×</button>
       </div>
       <div class="event-sop-body">
-        <div class="event-sop-phases">
-          ${(esop.phases || []).map(phase => `
-            <div class="event-phase${collapsedPhases.has(phase.id) ? ' collapsed' : ''}" data-phase-id="${phase.id}">
-              <div class="event-phase-header">
-                <button class="event-phase-toggle" data-toggle-phase="${phase.id}" title="折叠/展开">▼</button>
-                <span class="event-phase-name" data-phase-id="${phase.id}">${escapeHTML(phase.name || '未命名阶段')}</span>
-                <button class="event-phase-add-step-btn" data-add-step-phase="${phase.id}" title="添加步骤">+</button>
-              </div>
-              <div class="event-phase-body">
-                <div class="event-phase-steps">
-                  ${(phase.steps || []).map((step, i) => `
-                    <div class="event-step">
-                      <div class="event-step-num">${i + 1}</div>
-                      <div class="event-step-text">${escapeHTML(step.text)}</div>
-                    </div>
-                    ${i < phase.steps.length - 1 ? `<div class="event-step-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg></div>` : ''}
-                  `).join('')}
-                </div>
-              </div>
-            </div>
-          `).join('')}
+        <div class="event-sop-view-tabs" data-esop-tabs="${esop.id}">
+          <button class="event-sop-view-tab${activeTab === 'flow' ? ' active' : ''}" data-tab="flow" data-esop-id="${esop.id}">流程</button>
+          <button class="event-sop-view-tab${activeTab === 'detail' ? ' active' : ''}" data-tab="detail" data-esop-id="${esop.id}">详情</button>
         </div>
-        <button class="add-phase-btn" data-add-phase="${esop.id}">+ 添加阶段</button>
+        ${activeTab === 'flow' ? `
+          <div class="event-sop-flow-view" data-esop-flow="${esop.id}">
+            <div class="event-sop-phases">
+              ${(esop.phases || []).map(phase => `
+                <div class="event-phase${collapsedPhases.has(phase.id) ? ' collapsed' : ''}" data-phase-id="${phase.id}">
+                  <div class="event-phase-header">
+                    <button class="event-phase-toggle" data-toggle-phase="${phase.id}" title="折叠/展开">▼</button>
+                    <span class="event-phase-name" data-phase-id="${phase.id}">${escapeHTML(phase.name || '未命名阶段')}</span>
+                    <button class="event-phase-add-step-btn" data-add-step-phase="${phase.id}" title="添加步骤">+</button>
+                  </div>
+                  <div class="event-phase-body">
+                    <div class="event-phase-steps">
+                      ${(phase.steps || []).map((step, i) => `
+                        <div class="event-step">
+                          <div class="event-step-num">${i + 1}</div>
+                          <div class="event-step-text">${escapeHTML(step.text)}</div>
+                        </div>
+                        ${i < phase.steps.length - 1 ? `<div class="event-step-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg></div>` : ''}
+                      `).join('')}
+                    </div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+            <button class="add-phase-btn" data-add-phase="${esop.id}">+ 添加阶段</button>
+          </div>
+        ` : `
+          <div class="event-sop-detail-view" data-esop-detail="${esop.id}">
+            <div class="event-sop-detail-steps">
+              ${allSteps.length === 0 ? '<div class="empty-state" style="padding:20px;"><span style="font-size:28px;">📝</span>暂无步骤，先在「流程」页添加</div>' : allSteps.map((step, i) => `
+                <div class="esop-detail-step" data-step-id="${step.id}">
+                  <div class="esop-detail-step-header">
+                    <div class="esop-detail-step-num">${i + 1}</div>
+                    <div class="esop-detail-step-text">${escapeHTML(step.text)}${step.phaseName ? ` <span style="font-size:11px;color:var(--text-tertiary);">· ${escapeHTML(step.phaseName)}</span>` : ''}</div>
+                  </div>
+                  <div class="esop-detail-step-body">
+                    <textarea class="esop-detail-textarea" data-step-detail="${step.id}" placeholder="添加步骤的详细说明、子步骤等...&#10;例如：&#10;1）第一步&#10;2）第二步&#10;3）第三步">${escapeHTML(step.details || '')}</textarea>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `}
       </div>
     </div>
-  `).join('') + `<button class="sop-add-category-btn" id="addEventSopBtn">+ 新建事件 SOP</button>`;
+  `}).join('') + `<button class="sop-add-category-btn" id="addEventSopBtn">+ 新建事件 SOP</button>`;
 
   bindEventSOPEvents();
 }
@@ -2941,6 +3068,46 @@ function bindEventSOPEvents() {
   });
 
   bindAddEventSOP();
+
+  // ── View Tab switching (流程 / 详情) ──
+  $$('#sopEventContent .event-sop-view-tab').forEach(tab => {
+    tab.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const esopId = this.dataset.esopId;
+      const view = this.dataset.tab;
+      esopDetailTabs[esopId] = view;
+      renderEventSOP();
+    });
+  });
+
+  // ── Detail textarea auto-save ──
+  $$('#sopEventContent .esop-detail-textarea').forEach(textarea => {
+    let saveTimer = null;
+    textarea.addEventListener('input', function() {
+      clearTimeout(saveTimer);
+      const stepId = this.dataset.stepDetail;
+      const details = this.value;
+      saveTimer = setTimeout(() => {
+        for (const esop of data.eventSOPs) {
+          for (const phase of (esop.phases || [])) {
+            const step = (phase.steps || []).find(s => s.id === stepId);
+            if (step) {
+              step.details = details;
+              saveData(data);
+              return;
+            }
+          }
+        }
+      }, 500);
+    });
+    // Auto-resize
+    const autoResize = () => {
+      textarea.style.height = 'auto';
+      textarea.style.height = Math.max(60, textarea.scrollHeight) + 'px';
+    };
+    textarea.addEventListener('input', autoResize);
+    autoResize();
+  });
 }
 
 function bindAddEventSOP() {
