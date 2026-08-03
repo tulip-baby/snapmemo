@@ -1204,7 +1204,7 @@
           <path d="M3 12l9-9 9 9"/><path d="M5 10v10a1 1 0 001 1h3a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h3a1 1 0 001-1V10"/>
         </svg>
       </button>
-      <h1>日历</h1>
+      <h1>行程</h1>
       <button class="add-btn" id="scheduleAddBtn">+</button>
     </div>
     <div class="main-content">
@@ -1278,7 +1278,7 @@
         <div class="profile-stats">
           <div class="stat-item">
             <span class="stat-num" id="statSchedules">0</span>
-            <span class="stat-label">日历</span>
+            <span class="stat-label">行程</span>
           </div>
           <div class="stat-item">
             <span class="stat-num" id="statSops">0</span>
@@ -1325,7 +1325,7 @@
         <rect x="8" y="14" width="3" height="3" rx="0.5"/>
         <rect x="13" y="14" width="3" height="3" rx="0.5"/>
       </svg>
-      <span>日历</span>
+      <span>行程</span>
     </button>
     <button class="nav-item" data-page="sop">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -1875,7 +1875,7 @@ function aiClassify(text) {
 function autoClassify(text) { return aiClassify(text); }
 
 const typeLabels = {
-  'schedule': '📅 日历',
+  'schedule': '📅 行程',
   'daily-sop': '📋 日常 SOP',
   'event-sop': '🔁 事件 SOP',
   'inspiration': '💡 灵感'
@@ -2044,7 +2044,7 @@ function executeVoiceAction(type, text) {
     const timeStr = parseTimeFromText(text);
     data.schedules.unshift({ id: uid(), title: text, date: dateStr, time: timeStr });
     saveData(data);
-    showToast('已添加到日历');
+    showToast('已添加到行程');
   } else if (type === 'daily-sop') {
     openAddDailyItemModal(text);
   } else if (type === 'event-sop') {
@@ -2107,7 +2107,7 @@ function showQuickChoose(text) {
 function renderFullChooser(wrap, text, highlightType) {
   wrap.innerHTML = `
     <span style="font-size:13px;color:var(--text-tertiary);width:100%;text-align:center;">添加到：</span>
-    <button class="quick-chip${highlightType === 'schedule' ? ' highlighted' : ''}" data-type="schedule">📅 日历</button>
+    <button class="quick-chip${highlightType === 'schedule' ? ' highlighted' : ''}" data-type="schedule">📅 行程</button>
     <button class="quick-chip${highlightType === 'daily-sop' ? ' highlighted' : ''}" data-type="daily-sop">📋 日常 SOP</button>
     <button class="quick-chip${highlightType === 'event-sop' ? ' highlighted' : ''}" data-type="event-sop">🔁 事件 SOP</button>
     <button class="quick-chip${highlightType === 'inspiration' ? ' highlighted' : ''}" data-type="inspiration">💡 灵感</button>
@@ -2425,7 +2425,7 @@ function openAddScheduleModal(presetTitle) {
     saveData(data);
     closeModal();
     renderSchedule();
-    showToast('已添加日历');
+    showToast('已添加行程');
   });
 }
 
