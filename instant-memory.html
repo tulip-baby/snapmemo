@@ -551,33 +551,90 @@
     width: 100%; max-width: 260px;
   }
 
-  .event-sop-steps {
+  /* ── Event SOP Phases ── */
+  .event-sop-phases {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .event-phase {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: #fff;
+  }
+  .event-phase-header {
+    display: flex;
+    align-items: center;
+    padding: 10px 12px;
+    background: #f7f7f7;
+    gap: 8px;
+    cursor: default;
+  }
+  .event-phase-toggle {
+    border: none; background: none;
+    cursor: pointer; color: var(--text-tertiary);
+    font-size: 13px; padding: 2px 4px;
+    transition: transform 0.2s;
+    flex-shrink: 0; line-height: 1;
+  }
+  .event-phase-toggle:hover { color: var(--text); }
+  .event-phase.collapsed .event-phase-toggle { transform: rotate(-90deg); }
+  .event-phase.collapsed .event-phase-body { display: none; }
+  .event-phase-name {
+    font-size: 14px; font-weight: 500;
+    flex: 1; min-width: 0;
+    padding: 2px 4px;
+    border-radius: 4px;
+  }
+  .event-phase-name-edit {
+    font-size: 14px; font-weight: 500;
+    border: none; border-bottom: 2px solid var(--accent);
+    background: transparent;
+    outline: none; padding: 2px 4px;
+    flex: 1; min-width: 0;
+  }
+  .event-phase-add-step-btn {
+    border: none; background: none;
+    cursor: pointer; color: var(--text-tertiary);
+    font-size: 20px; padding: 0 4px;
+    line-height: 1; font-weight: 300;
+    transition: var(--transition); flex-shrink: 0;
+  }
+  .event-phase-add-step-btn:hover { color: var(--accent); }
+
+  .event-phase-body {
+    padding: 0;
+  }
+  .event-phase-steps {
     display: flex;
     flex-direction: column;
     align-items: center;
+    padding: 8px 12px 12px;
   }
   .event-step {
     display: flex;
     align-items: center;
     gap: 10px;
     width: 100%;
-    padding: 8px 0;
+    padding: 6px 0;
   }
   .event-step-num {
-    width: 28px; height: 28px;
+    width: 26px; height: 26px;
     border-radius: 50%;
     background: var(--accent);
     color: #fff;
     display: flex; align-items: center; justify-content: center;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     flex-shrink: 0;
   }
   .event-step-text {
     flex: 1;
-    font-size: 14px;
-    padding: 8px 12px;
-    background: #fff;
+    font-size: 13px;
+    padding: 7px 10px;
+    background: #fafafa;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);
   }
@@ -587,24 +644,37 @@
     padding: 2px 0;
   }
   .event-step-arrow svg {
-    width: 20px; height: 20px;
+    width: 18px; height: 18px;
     color: var(--text-tertiary);
   }
-
-  .event-step-add {
+  .event-phase-body .event-step-add-btn-inline {
     width: 100%;
-    padding: 8px;
+    padding: 6px;
     border: 1px dashed var(--border);
+    border-top: none;
     background: transparent;
-    border-radius: var(--radius-sm);
     cursor: pointer;
     color: var(--text-tertiary);
     font-size: 13px;
     font-family: inherit;
     transition: var(--transition);
-    margin-top: 8px;
+    display: block;
   }
-  .event-step-add:hover { border-color: var(--accent); color: var(--accent); }
+  .event-phase-body .event-step-add-btn-inline:hover { border-color: var(--accent); color: var(--accent); }
+
+  .add-phase-btn {
+    width: 100%;
+    padding: 10px;
+    border: 1px dashed var(--border);
+    background: transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--text-tertiary);
+    font-size: 14px;
+    font-family: inherit;
+    transition: var(--transition);
+  }
+  .add-phase-btn:hover { border-color: var(--accent); color: var(--accent); }
 
   .sop-add-category-btn {
     width: 100%;
@@ -1438,17 +1508,30 @@ function getDefaultData() {
 
 let data = getDefaultData();
 let currentUser = null;
-let collapsedESOPs = new Set(); // 事件 SOP 折叠状态
+let collapsedESOPs = new Set(); // 事件 SOP 卡片折叠状态
+let collapsedPhases = new Set(); // 阶段折叠状态
 
 // Load data from server
 async function loadDataFromServer() {
   try {
     const result = await apiFetch('/data');
+    // Migrate old flat steps to phases
+    let eventSOPs = result.eventSOPs || [];
+    eventSOPs = eventSOPs.map(esop => {
+      if (!esop.phases && Array.isArray(esop.steps)) {
+        // Old format: flat steps → single default phase
+        return { ...esop, phases: [{ id: uid(), name: '', steps: esop.steps }] };
+      }
+      if (!esop.phases) {
+        return { ...esop, phases: [] };
+      }
+      return esop;
+    });
     data = {
       profile: result.profile || { nickname: '未命名用户', avatar: '' },
       schedules: result.schedules || [],
       dailySOPs: result.dailySOPs || [],
-      eventSOPs: result.eventSOPs || [],
+      eventSOPs,
       inspirations: result.inspirations || []
     };
     return true;
@@ -2048,7 +2131,7 @@ function executeVoiceAction(type, text) {
   } else if (type === 'daily-sop') {
     openAddDailyItemModal(text);
   } else if (type === 'event-sop') {
-    data.eventSOPs.unshift({ id: uid(), title: text, steps: [{ id: uid(), text: '步骤 1' }] });
+    data.eventSOPs.unshift({ id: uid(), title: text, phases: [] });
     saveData(data);
     showToast('已创建事件 SOP');
   } else if (type === 'inspiration') {
@@ -2650,16 +2733,29 @@ function renderEventSOP() {
         <button class="event-sop-delete" data-delete-esop="${esop.id}" title="删除">×</button>
       </div>
       <div class="event-sop-body">
-        <div class="event-sop-steps">
-          ${esop.steps.map((step, i) => `
-            <div class="event-step">
-              <div class="event-step-num">${i + 1}</div>
-              <div class="event-step-text">${escapeHTML(step.text)}</div>
+        <div class="event-sop-phases">
+          ${(esop.phases || []).map(phase => `
+            <div class="event-phase${collapsedPhases.has(phase.id) ? ' collapsed' : ''}" data-phase-id="${phase.id}">
+              <div class="event-phase-header">
+                <button class="event-phase-toggle" data-toggle-phase="${phase.id}" title="折叠/展开">▼</button>
+                <span class="event-phase-name" data-phase-id="${phase.id}">${escapeHTML(phase.name || '未命名阶段')}</span>
+                <button class="event-phase-add-step-btn" data-add-step-phase="${phase.id}" title="添加步骤">+</button>
+              </div>
+              <div class="event-phase-body">
+                <div class="event-phase-steps">
+                  ${(phase.steps || []).map((step, i) => `
+                    <div class="event-step">
+                      <div class="event-step-num">${i + 1}</div>
+                      <div class="event-step-text">${escapeHTML(step.text)}</div>
+                    </div>
+                    ${i < phase.steps.length - 1 ? `<div class="event-step-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg></div>` : ''}
+                  `).join('')}
+                </div>
+              </div>
             </div>
-            ${i < esop.steps.length - 1 ? `<div class="event-step-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg></div>` : ''}
           `).join('')}
         </div>
-        <button class="event-step-add" data-add-step="${esop.id}">+ 添加步骤</button>
+        <button class="add-phase-btn" data-add-phase="${esop.id}">+ 添加阶段</button>
       </div>
     </div>
   `).join('') + `<button class="sop-add-category-btn" id="addEventSopBtn">+ 新建事件 SOP</button>`;
@@ -2668,7 +2764,7 @@ function renderEventSOP() {
 }
 
 function bindEventSOPEvents() {
-  // 折叠/展开
+  // SOP 卡片折叠/展开
   $$('#sopEventContent [data-toggle-esop]').forEach(btn => {
     btn.addEventListener('click', function(e) {
       e.stopPropagation();
@@ -2686,6 +2782,59 @@ function bindEventSOPEvents() {
     });
   });
 
+  // 阶段折叠/展开
+  $$('#sopEventContent [data-toggle-phase]').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const id = this.dataset.togglePhase;
+      const phase = $(`[data-phase-id="${id}"]`);
+      if (collapsedPhases.has(id)) {
+        collapsedPhases.delete(id);
+        phase.classList.remove('collapsed');
+        this.textContent = '▼';
+      } else {
+        collapsedPhases.add(id);
+        phase.classList.add('collapsed');
+        this.textContent = '▶';
+      }
+    });
+  });
+
+  // 阶段重命名（点击名称编辑）
+  $$('#sopEventContent [data-phase-id]').forEach(span => {
+    span.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const phaseId = this.dataset.phaseId;
+      // Find the phase in data
+      let phase = null;
+      for (const esop of data.eventSOPs) {
+        const p = (esop.phases || []).find(ph => ph.id === phaseId);
+        if (p) { phase = p; break; }
+      }
+      if (!phase) return;
+      const oldName = phase.name || '';
+      const input = document.createElement('input');
+      input.className = 'event-phase-name-edit';
+      input.value = oldName;
+      input.setAttribute('spellcheck', 'false');
+      input.setAttribute('placeholder', '输入阶段名称');
+      this.replaceWith(input);
+      input.focus();
+      input.select();
+      const finish = () => {
+        const newName = input.value.trim();
+        phase.name = newName;
+        saveData(data);
+        renderEventSOP();
+      };
+      input.addEventListener('blur', finish);
+      input.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
+      });
+    });
+  });
+
+  // 删除 SOP
   $$('#sopEventContent [data-delete-esop]').forEach(btn => {
     btn.addEventListener('click', function(e) {
       e.stopPropagation();
@@ -2698,13 +2847,19 @@ function bindEventSOPEvents() {
     });
   });
 
-  $$('#sopEventContent [data-add-step]').forEach(btn => {
-    btn.addEventListener('click', function() {
-      const esopId = this.dataset.addStep;
-      const esop = data.eventSOPs.find(e => e.id === esopId);
-      if (!esop) return;
+  // 向指定阶段添加步骤
+  $$('#sopEventContent [data-add-step-phase]').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const phaseId = this.dataset.addStepPhase;
+      let esop = null, phase = null;
+      for (const e of data.eventSOPs) {
+        const p = (e.phases || []).find(ph => ph.id === phaseId);
+        if (p) { esop = e; phase = p; break; }
+      }
+      if (!phase) return;
       openModal(`
-        <h3>添加步骤到「${escapeHTML(esop.title)}」</h3>
+        <h3>添加步骤到「${escapeHTML(phase.name || '未命名阶段')}」</h3>
         <input class="modal-input" id="modalStepText" placeholder="步骤内容">
         <div class="modal-actions">
           <button class="modal-btn secondary" id="modalCancel">取消</button>
@@ -2715,7 +2870,7 @@ function bindEventSOPEvents() {
       $('#modalConfirm').addEventListener('click', function() {
         const text = $('#modalStepText').value.trim();
         if (!text) { showToast('请输入步骤内容'); return; }
-        esop.steps.push({ id: uid(), text });
+        phase.steps.push({ id: uid(), text });
         saveData(data);
         closeModal();
         renderEventSOP();
@@ -2724,6 +2879,7 @@ function bindEventSOPEvents() {
     });
   });
 
+  // SOP 重命名
   $$('#sopEventContent [data-rename-esop]').forEach(btn => {
     btn.addEventListener('click', function(e) {
       e.stopPropagation();
@@ -2753,6 +2909,37 @@ function bindEventSOPEvents() {
     });
   });
 
+  // 添加阶段
+  $$('#sopEventContent [data-add-phase]').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const esopId = this.dataset.addPhase;
+      const esop = data.eventSOPs.find(e => e.id === esopId);
+      if (!esop) return;
+      openModal(`
+        <h3>添加阶段到「${escapeHTML(esop.title)}」</h3>
+        <input class="modal-input" id="modalPhaseName" placeholder="阶段名称，如：规划阶段">
+        <textarea class="modal-textarea" id="modalPhaseSteps" placeholder="步骤（每行一个步骤，可选）"></textarea>
+        <div class="modal-actions">
+          <button class="modal-btn secondary" id="modalCancel">取消</button>
+          <button class="modal-btn primary" id="modalConfirm">添加</button>
+        </div>
+      `);
+      $('#modalCancel').addEventListener('click', closeModal);
+      $('#modalConfirm').addEventListener('click', function() {
+        const name = $('#modalPhaseName').value.trim() || '未命名阶段';
+        const stepsText = $('#modalPhaseSteps').value.trim();
+        const steps = stepsText ? stepsText.split('\n').filter(s => s.trim()).map(s => ({ id: uid(), text: s.trim() })) : [];
+        if (!esop.phases) esop.phases = [];
+        esop.phases.push({ id: uid(), name, steps });
+        saveData(data);
+        closeModal();
+        renderEventSOP();
+        showToast('阶段已添加');
+      });
+    });
+  });
+
   bindAddEventSOP();
 }
 
@@ -2762,7 +2949,7 @@ function bindAddEventSOP() {
   btn.addEventListener('click', function() {
     openModal(`
       <h3>新建事件 SOP</h3>
-      <input class="modal-input" id="modalEsopTitle" placeholder="事件名称，如：项目上线流程">
+      <input class="modal-input" id="modalEsopTitle" placeholder="事件名称，如：期末备考">
       <textarea class="modal-textarea" id="modalEsopSteps" placeholder="步骤（每行一个步骤）"></textarea>
       <div class="modal-actions">
         <button class="modal-btn secondary" id="modalCancel">取消</button>
@@ -2775,7 +2962,8 @@ function bindAddEventSOP() {
       const stepsText = $('#modalEsopSteps').value.trim();
       if (!title) { showToast('请输入事件名称'); return; }
       const steps = stepsText ? stepsText.split('\n').filter(s => s.trim()).map(s => ({ id: uid(), text: s.trim() })) : [];
-      data.eventSOPs.unshift({ id: uid(), title, steps });
+      const phases = steps.length > 0 ? [{ id: uid(), name: '', steps }] : [];
+      data.eventSOPs.unshift({ id: uid(), title, phases });
       saveData(data);
       closeModal();
       renderEventSOP();

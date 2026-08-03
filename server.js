@@ -19,18 +19,13 @@ app.use(express.static(path.join(__dirname)));
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://localhost/snapmemo',
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
-  family: 4  // Force IPv4 to avoid ENETUNREACH on Render
+  family: 4  // Force IPv4 to avoid ENETREACH on Render
 });
 
 // Helper: wrap async route handlers to catch errors
 const asyncHandler = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch(next);
 };
-
-// Helper: build positional params $1, $2, ...
-function params(count) {
-  return Array.from({ length: count }, (_, i) => '$' + (i + 1)).join(', ');
-}
 
 // Initialize tables
 async function initDB() {
@@ -68,9 +63,15 @@ async function initDB() {
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       title TEXT NOT NULL
     )`,
-    `CREATE TABLE IF NOT EXISTS event_sop_steps (
+    `CREATE TABLE IF NOT EXISTS event_sop_phases (
       id TEXT PRIMARY KEY,
       event_sop_id TEXT NOT NULL REFERENCES event_sops(id) ON DELETE CASCADE,
+      name TEXT NOT NULL DEFAULT '',
+      sort_order INTEGER DEFAULT 0
+    )`,
+    `CREATE TABLE IF NOT EXISTS event_sop_steps (
+      id TEXT PRIMARY KEY,
+      phase_id TEXT NOT NULL REFERENCES event_sop_phases(id) ON DELETE CASCADE,
       text TEXT NOT NULL,
       sort_order INTEGER DEFAULT 0
     )`,
@@ -84,6 +85,32 @@ async function initDB() {
   for (const q of queries) {
     await pool.query(q);
   }
+
+  // Migration: if old event_sop_steps table still has event_sop_id (no phase_id),
+  // drop it so that the new table with phase_id gets created on next run.
+  // Since we already run CREATE IF NOT EXISTS above with phase_id, check if
+  // the old column exists and handle accordingly.
+  try {
+    const colCheck = await pool.query(
+      `SELECT column_name FROM information_schema.columns 
+       WHERE table_name = 'event_sop_steps' AND column_name = 'phase_id'`
+    );
+    if (colCheck.rows.length === 0) {
+      // Old table without phase_id — drop and let CREATE IF NOT EXISTS recreate
+      await pool.query('DROP TABLE IF EXISTS event_sop_steps CASCADE');
+      await pool.query(`CREATE TABLE IF NOT EXISTS event_sop_steps (
+        id TEXT PRIMARY KEY,
+        phase_id TEXT NOT NULL REFERENCES event_sop_phases(id) ON DELETE CASCADE,
+        text TEXT NOT NULL,
+        sort_order INTEGER DEFAULT 0
+      )`);
+      console.log('event_sop_steps 表已迁移到 phase_id 结构');
+    }
+  } catch (e) {
+    // Table might not exist yet, CREATE IF NOT EXISTS above handles it
+    console.log('event_sop_steps migration check:', e.message);
+  }
+
   console.log('PostgreSQL 数据库表已初始化');
 }
 
@@ -258,14 +285,26 @@ app.get('/api/data', authMiddleware, asyncHandler(async (req, res) => {
   );
   const eventSOPs = [];
   for (const esop of eventResult.rows) {
-    const stepResult = await pool.query(
-      'SELECT id, text, sort_order FROM event_sop_steps WHERE event_sop_id = $1 ORDER BY sort_order, id',
+    const phaseResult = await pool.query(
+      'SELECT id, name, sort_order FROM event_sop_phases WHERE event_sop_id = $1 ORDER BY sort_order, id',
       [esop.id]
     );
+    const phases = [];
+    for (const phase of phaseResult.rows) {
+      const stepResult = await pool.query(
+        'SELECT id, text, sort_order FROM event_sop_steps WHERE phase_id = $1 ORDER BY sort_order, id',
+        [phase.id]
+      );
+      phases.push({
+        id: phase.id,
+        name: phase.name,
+        steps: stepResult.rows.map(s => ({ id: s.id, text: s.text }))
+      });
+    }
     eventSOPs.push({
       id: esop.id,
       title: esop.title,
-      steps: stepResult.rows.map(s => ({ id: s.id, text: s.text }))
+      phases
     });
   }
 
@@ -340,13 +379,19 @@ app.put('/api/data', authMiddleware, asyncHandler(async (req, res) => {
       }
     }
 
-    // Replace event SOPs
+    // Replace event SOPs (with phases)
     const oldEvents = await client.query('SELECT id FROM event_sops WHERE user_id = $1', [userId]);
     for (const e of oldEvents.rows) {
-      await client.query('DELETE FROM event_sop_steps WHERE event_sop_id = $1', [e.id]);
+      const oldPhases = await client.query('SELECT id FROM event_sop_phases WHERE event_sop_id = $1', [e.id]);
+      for (const p of oldPhases.rows) {
+        await client.query('DELETE FROM event_sop_steps WHERE phase_id = $1', [p.id]);
+      }
+      await client.query('DELETE FROM event_sop_phases WHERE event_sop_id = $1', [e.id]);
     }
     await client.query('DELETE FROM event_sops WHERE user_id = $1', [userId]);
     if (Array.isArray(eventSOPs)) {
+      let phaseCounter = 0;
+      let stepCounter = 0;
       for (let ei = 0; ei < eventSOPs.length; ei++) {
         const esop = eventSOPs[ei];
         const eid = esop.id || (Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + 'e' + ei);
@@ -354,14 +399,41 @@ app.put('/api/data', authMiddleware, asyncHandler(async (req, res) => {
           'INSERT INTO event_sops (id, user_id, title) VALUES ($1, $2, $3)',
           [eid, userId, esop.title || '']
         );
-        if (Array.isArray(esop.steps)) {
+
+        const phases = esop.phases || [];
+        // Compatibility: old data with flat steps
+        if (phases.length === 0 && Array.isArray(esop.steps) && esop.steps.length > 0) {
+          const pid = Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + 'p' + phaseCounter++;
+          await client.query(
+            'INSERT INTO event_sop_phases (id, event_sop_id, name, sort_order) VALUES ($1, $2, $3, $4)',
+            [pid, eid, '', 0]
+          );
           for (let si = 0; si < esop.steps.length; si++) {
             const step = esop.steps[si];
-            const sid = step.id || (Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + 's' + si);
+            const sid = step.id || (Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + 's' + stepCounter++);
             await client.query(
-              'INSERT INTO event_sop_steps (id, event_sop_id, text, sort_order) VALUES ($1, $2, $3, $4)',
-              [sid, eid, step.text || '', si]
+              'INSERT INTO event_sop_steps (id, phase_id, text, sort_order) VALUES ($1, $2, $3, $4)',
+              [sid, pid, step.text || '', si]
             );
+          }
+        } else {
+          for (let pi = 0; pi < phases.length; pi++) {
+            const phase = phases[pi];
+            const pid = phase.id || (Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + 'p' + phaseCounter++);
+            await client.query(
+              'INSERT INTO event_sop_phases (id, event_sop_id, name, sort_order) VALUES ($1, $2, $3, $4)',
+              [pid, eid, phase.name || '', pi]
+            );
+            if (Array.isArray(phase.steps)) {
+              for (let si = 0; si < phase.steps.length; si++) {
+                const step = phase.steps[si];
+                const sid = step.id || (Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + 's' + stepCounter++);
+                await client.query(
+                  'INSERT INTO event_sop_steps (id, phase_id, text, sort_order) VALUES ($1, $2, $3, $4)',
+                  [sid, pid, step.text || '', si]
+                );
+              }
+            }
           }
         }
       }
@@ -410,12 +482,18 @@ async function createDefaultData(userId) {
     ]}
   ];
 
+  const esopId = uid();
+  const phaseId = uid();
   const eventSOP = {
-    id: uid(), title: '发布新版本上线流程', steps: [
-      { id: uid(), text: '代码审查通过' }, { id: uid(), text: '合并到主分支' },
-      { id: uid(), text: '运行自动化测试' }, { id: uid(), text: '构建生产版本' },
-      { id: uid(), text: '灰度发布 5% 流量' }, { id: uid(), text: '监控指标正常后全量发布' }
-    ]
+    id: esopId, title: '发布新版本上线流程',
+    phases: [{
+      id: phaseId, name: '默认流程',
+      steps: [
+        { id: uid(), text: '代码审查通过' }, { id: uid(), text: '合并到主分支' },
+        { id: uid(), text: '运行自动化测试' }, { id: uid(), text: '构建生产版本' },
+        { id: uid(), text: '灰度发布 5% 流量' }, { id: uid(), text: '监控指标正常后全量发布' }
+      ]
+    }]
   };
 
   const client = await pool.connect();
@@ -439,13 +517,17 @@ async function createDefaultData(userId) {
 
     await client.query(
       'INSERT INTO event_sops (id, user_id, title) VALUES ($1, $2, $3)',
-      [eventSOP.id, userId, eventSOP.title]
+      [esopId, userId, eventSOP.title]
     );
-    for (let si = 0; si < eventSOP.steps.length; si++) {
-      const step = eventSOP.steps[si];
+    await client.query(
+      'INSERT INTO event_sop_phases (id, event_sop_id, name, sort_order) VALUES ($1, $2, $3, $4)',
+      [phaseId, esopId, '默认流程', 0]
+    );
+    for (let si = 0; si < eventSOP.phases[0].steps.length; si++) {
+      const step = eventSOP.phases[0].steps[si];
       await client.query(
-        'INSERT INTO event_sop_steps (id, event_sop_id, text, sort_order) VALUES ($1, $2, $3, $4)',
-        [step.id, eventSOP.id, step.text, si]
+        'INSERT INTO event_sop_steps (id, phase_id, text, sort_order) VALUES ($1, $2, $3, $4)',
+        [step.id, phaseId, step.text, si]
       );
     }
 
