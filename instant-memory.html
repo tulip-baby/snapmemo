@@ -524,13 +524,22 @@
     font-size: 15px;
     font-weight: 600;
   }
-  .event-sop-delete {
+  .event-sop-actions { display: flex; gap: 4px; flex-shrink: 0; }
+  .event-sop-rename, .event-sop-delete {
     border: none; background: none;
     cursor: pointer; color: var(--text-tertiary);
-    font-size: 16px;
+    font-size: 16px; padding: 2px 4px;
     transition: var(--transition);
   }
+  .event-sop-rename:hover { color: var(--primary); }
   .event-sop-delete:hover { color: #ff3b30; }
+  .event-sop-title-edit {
+    font-size: 15px; font-weight: 600;
+    border: none; border-bottom: 2px solid var(--primary);
+    background: transparent;
+    outline: none; padding: 2px 4px;
+    width: 100%; max-width: 260px;
+  }
 
   .event-sop-steps {
     display: flex;
@@ -2612,8 +2621,11 @@ function renderEventSOP() {
   container.innerHTML = data.eventSOPs.map(esop => `
     <div class="event-sop-card">
       <div class="event-sop-header">
-        <span class="event-sop-title">${escapeHTML(esop.title)}</span>
-        <button class="event-sop-delete" data-delete-esop="${esop.id}">×</button>
+        <span class="event-sop-title" data-esop-id="${esop.id}">${escapeHTML(esop.title)}</span>
+        <div class="event-sop-actions">
+          <button class="event-sop-rename" data-rename-esop="${esop.id}" title="重命名">✎</button>
+          <button class="event-sop-delete" data-delete-esop="${esop.id}" title="删除">×</button>
+        </div>
       </div>
       <div class="event-sop-steps">
         ${esop.steps.map((step, i) => `
@@ -2667,6 +2679,35 @@ function bindEventSOPEvents() {
         renderEventSOP();
         showToast('步骤已添加');
       });
+    });
+  });
+
+  $$('#sopEventContent [data-rename-esop]').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const esopId = this.dataset.renameEsop;
+      const esop = data.eventSOPs.find(e => e.id === esopId);
+      if (!esop) return;
+      const titleSpan = $(`.event-sop-title[data-esop-id="${esopId}"]`);
+      const oldTitle = esop.title;
+      const input = document.createElement('input');
+      input.className = 'event-sop-title-edit';
+      input.value = oldTitle;
+      input.setAttribute('spellcheck', 'false');
+      titleSpan.replaceWith(input);
+      input.focus();
+      input.select();
+      const finish = () => {
+        const newTitle = input.value.trim();
+        if (newTitle && newTitle !== oldTitle) {
+          esop.title = newTitle;
+          saveData(data);
+          showToast('已重命名');
+        }
+        renderEventSOP();
+      };
+      input.addEventListener('blur', finish);
+      input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); } });
     });
   });
 
