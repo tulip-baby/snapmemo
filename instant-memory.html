@@ -1064,6 +1064,10 @@
   .setup-skip:hover { color: var(--text-secondary); background: var(--accent-light); }
 
   /* Loading spinner on auth */
+  .auth-loading-wrap {
+    display: flex; align-items: center; justify-content: center;
+    gap: 10px; padding: 32px 0;
+  }
   .auth-loading {
     display: inline-block;
     width: 18px; height: 18px;
@@ -1130,6 +1134,11 @@
 <!-- ====== AUTH SCREEN ====== -->
 <div class="auth-overlay" id="authOverlay">
   <div class="auth-brand">SnapMemo</div>
+  <div class="auth-loading-wrap" id="authLoadingWrap" style="display:none;">
+    <div class="auth-loading"></div>
+    <span style="color:var(--text-secondary);font-size:14px;">正在验证登录...</span>
+  </div>
+  <div id="authFormWrap">
   <div class="auth-tabs" id="authTabs">
     <button class="auth-tab active" data-tab="login">登录</button>
     <button class="auth-tab" data-tab="register">注册</button>
@@ -1141,6 +1150,7 @@
     <button class="auth-submit" type="submit" id="authSubmitBtn">登 录</button>
   </form>
   <div class="auth-hint">数据云端保存，换设备也能访问</div>
+  </div>
 </div>
 
 <!-- ====== PROFILE SETUP SCREEN (注册后第二步) ====== -->
@@ -3140,6 +3150,8 @@ $('#logoutBtn').addEventListener('click', function() {
   clearToken();
   currentUser = null;
   data = getDefaultData();
+  $('#authLoadingWrap').style.display = 'none';
+  $('#authFormWrap').style.display = '';
   $('#authOverlay').classList.remove('hidden');
   $$('.page').forEach(p => { p.classList.remove('active'); });
   $('#page-home').classList.add('active');
@@ -3206,11 +3218,13 @@ function escapeHTML(str) {
 // INIT
 // ============================================================
 async function init() {
-  // Check for existing token
   const token = getToken();
   if (token) {
+    // 有 token，先显示加载状态而非登录表单
+    $('#authLoadingWrap').style.display = 'flex';
+    $('#authFormWrap').style.display = 'none';
+    $('#authOverlay').classList.remove('hidden');
     try {
-      // Verify token is still valid by fetching user info
       const result = await apiFetch('/me');
       currentUser = result.user;
       const loaded = await loadDataFromServer();
@@ -3220,12 +3234,17 @@ async function init() {
         return;
       }
     } catch (err) {
-      // Token invalid, clear it
       clearToken();
     }
+    // 验证失败，切回登录表单
+    $('#authLoadingWrap').style.display = 'none';
+    $('#authFormWrap').style.display = '';
+  } else {
+    // 无 token，直接显示登录表单
+    $('#authLoadingWrap').style.display = 'none';
+    $('#authFormWrap').style.display = '';
+    $('#authOverlay').classList.remove('hidden');
   }
-  // Show auth screen
-  $('#authOverlay').classList.remove('hidden');
 }
 
 function initApp() {
