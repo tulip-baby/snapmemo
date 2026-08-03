@@ -1952,22 +1952,7 @@ function parseTimeFromText(text) {
   const hm = t.match(/(\d{1,2})[：:](\d{2})/);
   if (hm) return `${String(parseInt(hm[1])).padStart(2,'0')}:${hm[2]}`;
 
-  // Chinese "X点" / "X点半" / "X点X分" (e.g. 九点, 十点半, 三点二十分)
-  const ch = t.match(/([零一二两三四五六七八九十]|十一|十二)点(半|([零一二三四五六七八九十]+)分?)?/);
-  if (ch) {
-    const h = toDigit(ch[1]);
-    if (ch[2] === '半') return `${String(h).padStart(2,'0')}:30`;
-    if (ch[3]) return `${String(h).padStart(2,'0')}:${String(parseCnNumber(ch[3])).padStart(2,'0')}`;
-    return `${String(h).padStart(2,'0')}:00`;
-  }
-
-  // Digit "X点" / "X点半" / "X点X分" (分 now optional, e.g. "12点30")
-  const hp = t.match(/(\d{1,2})点(半|(\d+)分?)?/);
-  if (hp) {
-    if (hp[2] === '半') return `${String(parseInt(hp[1])).padStart(2,'0')}:30`;
-    if (hp[3]) return `${String(parseInt(hp[1])).padStart(2,'0')}:${String(parseInt(hp[3])).padStart(2,'0')}`;
-    return `${String(parseInt(hp[1])).padStart(2,'0')}:00`;
-  }
+  // ── Period-prefixed patterns FIRST (before generic) — needs 12h→24h adjustment ──
 
   // "早上九点" / "中午十二点三十" (Chinese numeral with period prefix, minutes optional)
   const cpm = t.match(/(早上|上午|中午|下午|晚上|傍晚|凌晨)([零一二两三四五六七八九十]|十一|十二)点(半|([零一二三四五六七八九十]+)分?)?/);
@@ -1989,6 +1974,25 @@ function parseTimeFromText(text) {
     if (pm[3] === '半') return `${String(h).padStart(2,'0')}:30`;
     if (pm[4]) return `${String(h).padStart(2,'0')}:${String(parseInt(pm[4])).padStart(2,'0')}`;
     return `${String(h).padStart(2,'0')}:00`;
+  }
+
+  // ── Generic time patterns (no period adjustment needed) ──
+
+  // Chinese "X点" / "X点半" / "X点X分" (e.g. 九点, 十点半, 三点二十分)
+  const ch = t.match(/([零一二两三四五六七八九十]|十一|十二)点(半|([零一二三四五六七八九十]+)分?)?/);
+  if (ch) {
+    const h = toDigit(ch[1]);
+    if (ch[2] === '半') return `${String(h).padStart(2,'0')}:30`;
+    if (ch[3]) return `${String(h).padStart(2,'0')}:${String(parseCnNumber(ch[3])).padStart(2,'0')}`;
+    return `${String(h).padStart(2,'0')}:00`;
+  }
+
+  // Digit "X点" / "X点半" / "X点X分" (分 now optional, e.g. "12点30")
+  const hp = t.match(/(\d{1,2})点(半|(\d+)分?)?/);
+  if (hp) {
+    if (hp[2] === '半') return `${String(parseInt(hp[1])).padStart(2,'0')}:30`;
+    if (hp[3]) return `${String(parseInt(hp[1])).padStart(2,'0')}:${String(parseInt(hp[3])).padStart(2,'0')}`;
+    return `${String(parseInt(hp[1])).padStart(2,'0')}:00`;
   }
 
   // Generic time-of-day markers (only when no specific hour given)
