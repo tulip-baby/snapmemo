@@ -524,7 +524,7 @@
     font-size: 15px;
     font-weight: 600;
   }
-  .event-sop-actions { display: flex; gap: 4px; flex-shrink: 0; }
+  .event-sop-title-group { display: flex; align-items: center; gap: 6px; min-width: 0; }
   .event-sop-rename, .event-sop-delete {
     border: none; background: none;
     cursor: pointer; color: var(--text-tertiary);
@@ -2621,11 +2621,11 @@ function renderEventSOP() {
   container.innerHTML = data.eventSOPs.map(esop => `
     <div class="event-sop-card">
       <div class="event-sop-header">
-        <span class="event-sop-title" data-esop-id="${esop.id}">${escapeHTML(esop.title)}</span>
-        <div class="event-sop-actions">
+        <div class="event-sop-title-group">
           <button class="event-sop-rename" data-rename-esop="${esop.id}" title="重命名">✎</button>
-          <button class="event-sop-delete" data-delete-esop="${esop.id}" title="删除">×</button>
+          <span class="event-sop-title" data-esop-id="${esop.id}">${escapeHTML(esop.title)}</span>
         </div>
+        <button class="event-sop-delete" data-delete-esop="${esop.id}" title="删除">×</button>
       </div>
       <div class="event-sop-steps">
         ${esop.steps.map((step, i) => `
