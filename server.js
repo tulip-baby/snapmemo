@@ -18,7 +18,8 @@ app.use(express.static(path.join(__dirname)));
 // ── Database ──
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://localhost/snapmemo',
-  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
+  family: 4  // Force IPv4 to avoid ENETUNREACH on Render
 });
 
 // Helper: wrap async route handlers to catch errors
