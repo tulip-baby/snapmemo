@@ -275,8 +275,7 @@ app.put('/api/data', authMiddleware, (req, res) => {
   const userId = req.userId;
   const { profile, schedules, dailySOPs, eventSOPs, inspirations } = req.body;
 
-  try {
-    const syncAll = db.transaction(() => {
+  const syncAll = db.transaction(() => {
     // Update profile
     if (profile) {
       db.prepare('UPDATE users SET nickname = ?, avatar = ? WHERE id = ?')
