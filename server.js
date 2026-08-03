@@ -208,7 +208,7 @@ app.put('/api/me', authMiddleware, (req, res) => {
     db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...params);
   }
 
-  const user = db.prepare('SELECT id, username, nickname, avatar FROM users WHERE id = ?').get(req.userId);
+  const user = db.prepare('SELECT id, phone, nickname, avatar FROM users WHERE id = ?').get(req.userId);
   res.json({ user });
 });
 
