@@ -322,6 +322,17 @@ app.get('/api/data', authMiddleware, asyncHandler(async (req, res) => {
     });
   }
 
+  // Clean up legacy empty default SOPs (from old migration) and auto-create new template
+  if (eventSOPs.length > 0) {
+    for (let i = eventSOPs.length - 1; i >= 0; i--) {
+      const s = eventSOPs[i];
+      if (s.title === '发布新版本上线流程' && (!s.phases || s.phases.length === 0)) {
+        await pool.query('DELETE FROM event_sops WHERE id = $1', [s.id]);
+        eventSOPs.splice(i, 1);
+      }
+    }
+  }
+
   // Auto-create default event SOPs if user has none (template for new/existing users)
   if (eventSOPs.length === 0) {
     await ensureDefaultEventSOPs(userId);
