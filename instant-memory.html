@@ -533,6 +533,16 @@
   }
   .event-sop-rename:hover { color: var(--primary); }
   .event-sop-delete:hover { color: #ff3b30; }
+  .event-sop-toggle {
+    border: none; background: none;
+    cursor: pointer; color: var(--text-tertiary);
+    font-size: 15px; padding: 2px 4px;
+    transition: transform 0.2s;
+    flex-shrink: 0;
+  }
+  .event-sop-toggle:hover { color: var(--text-primary); }
+  .event-sop-card.collapsed .event-sop-toggle { transform: rotate(-90deg); }
+  .event-sop-card.collapsed .event-sop-body { display: none; }
   .event-sop-title-edit {
     font-size: 15px; font-weight: 600;
     border: none; border-bottom: 2px solid var(--primary);
@@ -1418,6 +1428,7 @@ function getDefaultData() {
 
 let data = getDefaultData();
 let currentUser = null;
+let collapsedESOPs = new Set(); // 事件 SOP 折叠状态
 
 // Load data from server
 async function loadDataFromServer() {
@@ -2619,24 +2630,27 @@ function renderEventSOP() {
   }
 
   container.innerHTML = data.eventSOPs.map(esop => `
-    <div class="event-sop-card">
+    <div class="event-sop-card${collapsedESOPs.has(esop.id) ? ' collapsed' : ''}" data-esop-card="${esop.id}">
       <div class="event-sop-header">
         <div class="event-sop-title-group">
+          <button class="event-sop-toggle" data-toggle-esop="${esop.id}" title="折叠/展开">▼</button>
           <button class="event-sop-rename" data-rename-esop="${esop.id}" title="重命名">✎</button>
           <span class="event-sop-title" data-esop-id="${esop.id}">${escapeHTML(esop.title)}</span>
         </div>
         <button class="event-sop-delete" data-delete-esop="${esop.id}" title="删除">×</button>
       </div>
-      <div class="event-sop-steps">
-        ${esop.steps.map((step, i) => `
-          <div class="event-step">
-            <div class="event-step-num">${i + 1}</div>
-            <div class="event-step-text">${escapeHTML(step.text)}</div>
-          </div>
-          ${i < esop.steps.length - 1 ? `<div class="event-step-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg></div>` : ''}
-        `).join('')}
+      <div class="event-sop-body">
+        <div class="event-sop-steps">
+          ${esop.steps.map((step, i) => `
+            <div class="event-step">
+              <div class="event-step-num">${i + 1}</div>
+              <div class="event-step-text">${escapeHTML(step.text)}</div>
+            </div>
+            ${i < esop.steps.length - 1 ? `<div class="event-step-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg></div>` : ''}
+          `).join('')}
+        </div>
+        <button class="event-step-add" data-add-step="${esop.id}">+ 添加步骤</button>
       </div>
-      <button class="event-step-add" data-add-step="${esop.id}">+ 添加步骤</button>
     </div>
   `).join('') + `<button class="sop-add-category-btn" id="addEventSopBtn">+ 新建事件 SOP</button>`;
 
@@ -2644,6 +2658,24 @@ function renderEventSOP() {
 }
 
 function bindEventSOPEvents() {
+  // 折叠/展开
+  $$('#sopEventContent [data-toggle-esop]').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const id = this.dataset.toggleEsop;
+      const card = $(`[data-esop-card="${id}"]`);
+      if (collapsedESOPs.has(id)) {
+        collapsedESOPs.delete(id);
+        card.classList.remove('collapsed');
+        this.textContent = '▼';
+      } else {
+        collapsedESOPs.add(id);
+        card.classList.add('collapsed');
+        this.textContent = '▶';
+      }
+    });
+  });
+
   $$('#sopEventContent [data-delete-esop]').forEach(btn => {
     btn.addEventListener('click', function(e) {
       e.stopPropagation();
