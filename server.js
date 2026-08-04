@@ -125,6 +125,20 @@ async function initDB() {
     console.log('event_sop_steps details migration:', e.message);
   }
 
+  // Migration: add done column to schedules if not exists
+  try {
+    const doneCheck = await pool.query(
+      `SELECT column_name FROM information_schema.columns 
+       WHERE table_name = 'schedules' AND column_name = 'done'`
+    );
+    if (doneCheck.rows.length === 0) {
+      await pool.query('ALTER TABLE schedules ADD COLUMN done BOOLEAN DEFAULT FALSE');
+      console.log('schedules 已添加 done 列');
+    }
+  } catch (e) {
+    console.log('schedules done migration:', e.message);
+  }
+
   console.log('PostgreSQL 数据库表已初始化');
 }
 
@@ -272,7 +286,7 @@ app.get('/api/data', authMiddleware, asyncHandler(async (req, res) => {
   const user = userResult.rows[0] || { nickname: '', avatar: '' };
 
   const schedResult = await pool.query(
-    'SELECT id, title, date, time FROM schedules WHERE user_id = $1 ORDER BY date DESC, time DESC',
+    'SELECT id, title, date, time, done FROM schedules WHERE user_id = $1 ORDER BY date DESC, time DESC',
     [userId]
   );
 
@@ -373,7 +387,7 @@ app.get('/api/data', authMiddleware, asyncHandler(async (req, res) => {
 
   res.json({
     profile: { nickname: user.nickname, avatar: user.avatar || '' },
-    schedules: schedResult.rows,
+    schedules: schedResult.rows.map(s => ({ id: s.id, title: s.title, date: s.date, time: s.time, done: !!s.done })),
     dailySOPs,
     eventSOPs,
     inspirations: inspResult.rows
@@ -404,8 +418,8 @@ app.put('/api/data', authMiddleware, asyncHandler(async (req, res) => {
         const s = schedules[i];
         const sid = s.id || (Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + i);
         await client.query(
-          'INSERT INTO schedules (id, user_id, title, date, time) VALUES ($1, $2, $3, $4, $5)',
-          [sid, userId, s.title || '', s.date || '', s.time || '']
+          'INSERT INTO schedules (id, user_id, title, date, time, done) VALUES ($1, $2, $3, $4, $5, $6)',
+          [sid, userId, s.title || '', s.date || '', s.time || '', s.done ? true : false]
         );
       }
     }

@@ -363,6 +363,36 @@
   }
   .schedule-item:hover .schedule-delete { opacity: 1; }
   .schedule-delete:hover { color: #ff3b30; }
+  .schedule-check {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 2px solid #ccc;
+    background: transparent;
+    cursor: pointer;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+    padding: 0;
+  }
+  .schedule-check:hover { border-color: var(--accent); }
+  .schedule-check.done {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .schedule-check.done::after {
+    content: '✓';
+    color: #fff;
+    font-size: 13px;
+    font-weight: bold;
+  }
+  .schedule-item.completed .schedule-content {
+    text-decoration: line-through;
+    color: var(--text-tertiary);
+  }
+  .schedule-item.completed { opacity: 0.6; }
 
   .empty-state {
     text-align: center;
@@ -2219,7 +2249,7 @@ function executeVoiceAction(type, text) {
   if (type === 'schedule') {
     const dateStr = parseDateFromText(text);
     const timeStr = parseTimeFromText(text);
-    data.schedules.unshift({ id: uid(), title: text, date: dateStr, time: timeStr });
+    data.schedules.unshift({ id: uid(), title: text, date: dateStr, time: timeStr, done: false });
     saveData(data);
     showToast('已添加到行程');
   } else if (type === 'daily-sop') {
@@ -2456,6 +2486,7 @@ function renderSchedule() {
     }
   });
   Object.values(groupMap).forEach(arr => arr.sort((a, b) => {
+    if (!!a.done !== !!b.done) return a.done ? -1 : 1;
     if (a.date !== b.date) return a.date.localeCompare(b.date);
     return (a.time || '').localeCompare(b.time || '');
   }));
@@ -2471,7 +2502,8 @@ function renderSchedule() {
     items.forEach(s => {
       const d = new Date(s.date);
       const timeLabel = s.time ? `${formatDateShort(d)} ${s.time}` : formatDateShort(d);
-      html += `<div class="schedule-item">
+      html += `<div class="schedule-item${s.done ? ' completed' : ''}">
+        <button class="schedule-check${s.done ? ' done' : ''}" data-check="${s.id}" title="标记完成"></button>
         <div class="schedule-content">${escapeHTML(s.title)}</div>
         <span class="schedule-time-badge">${timeLabel}</span>
         <button class="schedule-delete" data-id="${s.id}">×</button>
@@ -2497,6 +2529,18 @@ function renderSchedule() {
       saveData(data);
       renderSchedule();
       showToast('已删除');
+    });
+  });
+  list.querySelectorAll('.schedule-check').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const s = data.schedules.find(x => x.id === this.dataset.check);
+      if (s) {
+        s.done = !s.done;
+        saveData(data);
+        renderSchedule();
+        showToast(s.done ? '已完成 ✓' : '已取消完成');
+      }
     });
   });
 }
@@ -2597,7 +2641,8 @@ function openAddScheduleModal(presetTitle) {
       id: uid(),
       title,
       date: finalDate,
-      time: finalTime
+      time: finalTime,
+      done: false
     });
     saveData(data);
     closeModal();
